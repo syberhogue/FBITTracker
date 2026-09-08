@@ -25,7 +25,7 @@ export function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const navigate = useNavigate();
-  if (profile) return <Navigate to="/" replace />;
+  if (profile) return <Navigate to="/dashboard" replace />;
   return <AuthFrame title="Welcome back" body="Sign in with your invited Ontario Tech account.">
     <form className="space-y-4" onSubmit={async (event) => { event.preventDefault(); setError(''); try { await signIn(email, password); } catch (reason) { setError(reason instanceof Error ? reason.message : 'Sign in failed.'); } }}>
       <label><span className="label">Email</span><div className="relative"><Mail className="absolute left-3 top-3 text-slate-400" size={17}/><input className="field pl-10" type="email" required value={email} onChange={(event) => setEmail(event.target.value)}/></div></label>
@@ -47,6 +47,6 @@ export function ForgotPasswordPage() {
 export function AcceptInvitePage() {
   const { setPassword } = useAuth(); const [password, setPasswordValue] = useState(''); const [done, setDone] = useState(false); const navigate = useNavigate();
   return <AuthFrame title="Finish account setup" body="Choose a password for your invited FBIT Tracker account.">
-    {done ? <button className="btn-primary w-full" onClick={() => navigate('/')}>Continue to dashboard</button> : <form className="space-y-4" onSubmit={async (event) => { event.preventDefault(); await setPassword(password); setDone(true); }}><label><span className="label">New password</span><input className="field" type="password" minLength={12} required value={password} onChange={(event) => setPasswordValue(event.target.value)}/><span className="mt-1 block text-[10px] text-slate-500">Use at least 12 characters.</span></label><button className="btn-orange w-full">Set password</button></form>}
+    {done ? <button className="btn-primary w-full" onClick={() => navigate('/dashboard')}>Continue to dashboard</button> : <form className="space-y-4" onSubmit={async (event) => { event.preventDefault(); await setPassword(password); setDone(true); }}><label><span className="label">New password</span><input className="field" type="password" minLength={12} required value={password} onChange={(event) => setPasswordValue(event.target.value)}/><span className="mt-1 block text-[10px] text-slate-500">Use at least 12 characters.</span></label><button className="btn-orange w-full">Set password</button></form>}
   </AuthFrame>;
 }

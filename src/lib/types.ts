@@ -3,6 +3,16 @@ export type TrackerType = 'general' | 'grade-submission';
 export type TrackerCategory = 'Administrative' | 'Academic' | 'Research' | 'Other';
 export type StageStatus = 'pending' | 'in-progress' | 'completed' | 'skipped';
 export type SubmissionStatus = 'submitted' | 'outstanding';
+export type TrackerTemplateScope = 'personal' | 'faculty';
+export type ImportantDateSemester = 'Fall' | 'Winter' | 'Spring/Summer';
+
+export interface AcademicTermDraft {
+  code: string;
+  name: string;
+  startsOn: string;
+  endsOn: string;
+  isCurrent: boolean;
+}
 
 export interface Profile {
   id: string;
@@ -22,6 +32,13 @@ export interface StageDocument {
   createdAt: string;
 }
 
+export interface StageLink {
+  id: string;
+  title: string;
+  url: string;
+  createdAt: string;
+}
+
 export interface Stage {
   id: string;
   title: string;
@@ -31,6 +48,7 @@ export interface Stage {
   status: StageStatus;
   sortOrder: number;
   documents: StageDocument[];
+  links?: StageLink[];
 }
 
 export interface Tracker {
@@ -46,6 +64,38 @@ export interface Tracker {
   passRateThreshold?: number;
 }
 
+export interface TrackerTemplateStage {
+  id: string;
+  title: string;
+  description: string;
+  dueOffsetDays: number;
+  isRequired: boolean;
+  sortOrder: number;
+}
+
+export interface TrackerTemplate {
+  id: string;
+  name: string;
+  description: string;
+  type: TrackerType;
+  category: TrackerCategory;
+  scope: TrackerTemplateScope;
+  ownerId: string;
+  ownerName?: string;
+  createdAt: string;
+  stages: TrackerTemplateStage[];
+}
+
+export interface TrackerTemplateDraft {
+  id?: string;
+  name: string;
+  description: string;
+  type: TrackerType;
+  category: TrackerCategory;
+  scope: TrackerTemplateScope;
+  stages: Array<Omit<TrackerTemplateStage, 'id'>>;
+}
+
 export interface TermMetrics {
   average: number;
   passRate: number;
@@ -53,6 +103,7 @@ export interface TermMetrics {
   distribution: Record<'A' | 'B' | 'C' | 'D' | 'F', number>;
   uploadVersion?: number;
   uploadedAt?: string;
+  gradeFingerprint?: string;
 }
 
 export interface Course {
@@ -78,15 +129,44 @@ export interface AppSettings {
 }
 
 export interface GradeCsvRow {
-  StudentID: string;
-  Name: string;
-  FinalGrade: string | number;
+  'Semester ID': string;
+  'Course Code': string;
+  'Last Name': string;
+  'First Name'?: string;
+  Section?: string;
+  'Student ID': string;
+  'Final Grade (%)': string | number;
+  'Final Letter Grade': string;
   [key: string]: unknown;
 }
 
 export interface GradeCsvResult {
   grades: number[];
   preview: Array<{ row: number; studentId: string; name: string; grade: number }>;
+  errors: string[];
+  courseCode?: string;
+  courseTitle?: string;
+  semesterId?: string;
+}
+
+export interface ImportantDateDraft {
+  semester: ImportantDateSemester;
+  startsOn: string;
+  endsOn: string;
+  shortName: string;
+  description: string;
+  sortOrder: number;
+}
+
+export interface ImportantDate extends ImportantDateDraft {
+  id: string;
+  academicYear: string;
+  sourceFileName: string;
+  updatedAt: string;
+}
+
+export interface ImportantDatesParseResult {
+  rows: ImportantDateDraft[];
   errors: string[];
 }
 

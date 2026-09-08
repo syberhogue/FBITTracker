@@ -1,4 +1,4 @@
-﻿export type Json =
+export type Json =
   | string
   | number
   | boolean
@@ -349,6 +349,7 @@ export type Database = {
           id: string
           is_active: boolean
           pass_rate: number
+          submission_source: string
           uploaded_by: string
           version: number
         }
@@ -361,6 +362,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           pass_rate?: number
+          submission_source?: string
           uploaded_by?: string
           version: number
         }
@@ -373,6 +375,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           pass_rate?: number
+          submission_source?: string
           uploaded_by?: string
           version?: number
         }
@@ -387,6 +390,59 @@ export type Database = {
           {
             foreignKeyName: "grade_uploads_uploaded_by_fkey"
             columns: ["uploaded_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      important_dates: {
+        Row: {
+          academic_year: string
+          created_at: string
+          description: string
+          ends_on: string
+          id: string
+          imported_by: string
+          semester: string
+          short_name: string
+          sort_order: number
+          source_file_name: string
+          starts_on: string
+          updated_at: string
+        }
+        Insert: {
+          academic_year: string
+          created_at?: string
+          description: string
+          ends_on: string
+          id?: string
+          imported_by?: string
+          semester: string
+          short_name: string
+          sort_order: number
+          source_file_name: string
+          starts_on: string
+          updated_at?: string
+        }
+        Update: {
+          academic_year?: string
+          created_at?: string
+          description?: string
+          ends_on?: string
+          id?: string
+          imported_by?: string
+          semester?: string
+          short_name?: string
+          sort_order?: number
+          source_file_name?: string
+          starts_on?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "important_dates_imported_by_fkey"
+            columns: ["imported_by"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -484,6 +540,100 @@ export type Database = {
             columns: ["organization_unit_id"]
             isOneToOne: false
             referencedRelation: "organization_units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      public_grade_submissions: {
+        Row: {
+          course_term_id: string
+          created_at: string
+          faculty_email: string
+          faculty_name: string
+          grade_upload_id: string
+          id: string
+        }
+        Insert: {
+          course_term_id: string
+          created_at?: string
+          faculty_email: string
+          faculty_name: string
+          grade_upload_id: string
+          id?: string
+        }
+        Update: {
+          course_term_id?: string
+          created_at?: string
+          faculty_email?: string
+          faculty_name?: string
+          grade_upload_id?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "public_grade_submissions_course_term_id_fkey"
+            columns: ["course_term_id"]
+            isOneToOne: false
+            referencedRelation: "course_terms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "public_grade_submissions_grade_upload_id_fkey"
+            columns: ["grade_upload_id"]
+            isOneToOne: true
+            referencedRelation: "grade_uploads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      stage_links: {
+        Row: {
+          created_at: string
+          created_by: string
+          id: string
+          stage_id: string
+          title: string
+          tracker_id: string
+          url: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string
+          id?: string
+          stage_id: string
+          title: string
+          tracker_id: string
+          url: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          id?: string
+          stage_id?: string
+          title?: string
+          tracker_id?: string
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stage_links_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stage_links_stage_id_tracker_id_fkey"
+            columns: ["stage_id", "tracker_id"]
+            isOneToOne: false
+            referencedRelation: "stages"
+            referencedColumns: ["id", "tracker_id"]
+          },
+          {
+            foreignKeyName: "stage_links_tracker_id_fkey"
+            columns: ["tracker_id"]
+            isOneToOne: false
+            referencedRelation: "trackers"
             referencedColumns: ["id"]
           },
         ]
@@ -646,6 +796,88 @@ export type Database = {
           },
         ]
       }
+      tracker_template_stages: {
+        Row: {
+          description: string
+          due_offset_days: number
+          id: string
+          is_required: boolean
+          sort_order: number
+          template_id: string
+          title: string
+        }
+        Insert: {
+          description?: string
+          due_offset_days: number
+          id?: string
+          is_required?: boolean
+          sort_order: number
+          template_id: string
+          title: string
+        }
+        Update: {
+          description?: string
+          due_offset_days?: number
+          id?: string
+          is_required?: boolean
+          sort_order?: number
+          template_id?: string
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tracker_template_stages_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "tracker_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tracker_templates: {
+        Row: {
+          category: Database["public"]["Enums"]["tracker_category"]
+          created_at: string
+          description: string
+          id: string
+          name: string
+          owner_id: string
+          scope: string
+          type: Database["public"]["Enums"]["tracker_type"]
+          updated_at: string
+        }
+        Insert: {
+          category: Database["public"]["Enums"]["tracker_category"]
+          created_at?: string
+          description?: string
+          id?: string
+          name: string
+          owner_id?: string
+          scope?: string
+          type: Database["public"]["Enums"]["tracker_type"]
+          updated_at?: string
+        }
+        Update: {
+          category?: Database["public"]["Enums"]["tracker_category"]
+          created_at?: string
+          description?: string
+          id?: string
+          name?: string
+          owner_id?: string
+          scope?: string
+          type?: Database["public"]["Enums"]["tracker_type"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tracker_templates_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       trackers: {
         Row: {
           average_threshold: number | null
@@ -708,12 +940,75 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      create_academic_term: {
+        Args: {
+          p_code: string
+          p_ends_on: string
+          p_is_current?: boolean
+          p_name: string
+          p_starts_on: string
+        }
+        Returns: string
+      }
+      create_tracker_from_template: {
+        Args: {
+          p_anchor_date: string
+          p_description: string
+          p_template_id: string
+          p_title: string
+        }
+        Returns: string
+      }
+      delete_course_term_grades: {
+        Args: { p_course_id: string; p_term_code: string }
+        Returns: number
+      }
       import_grade_targets: {
         Args: { p_rows: Json; p_term_code: string; p_tracker_id: string }
         Returns: number
       }
+      import_important_dates: {
+        Args: {
+          p_academic_year: string
+          p_rows: Json
+          p_source_file_name: string
+        }
+        Returns: number
+      }
+      resolve_grade_course: {
+        Args: {
+          p_course_code: string
+          p_course_title: string
+          p_term_code: string
+        }
+        Returns: Json
+      }
+      save_tracker_template: {
+        Args: {
+          p_category: Database["public"]["Enums"]["tracker_category"]
+          p_description: string
+          p_name: string
+          p_scope: string
+          p_stages: Json
+          p_template_id: string
+          p_type: Database["public"]["Enums"]["tracker_type"]
+        }
+        Returns: string
+      }
       submit_grade_upload: {
         Args: { p_course_term_id: string; p_grades: number[] }
+        Returns: Json
+      }
+      submit_public_grade_upload: {
+        Args: {
+          p_course_code: string
+          p_course_title: string
+          p_term_code: string
+          p_faculty_email: string
+          p_faculty_name: string
+          p_file_course_code: string
+          p_grades: number[]
+        }
         Returns: Json
       }
     }
@@ -875,4 +1170,3 @@ export const Constants = {
     },
   },
 } as const
-

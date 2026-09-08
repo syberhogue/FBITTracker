@@ -34,6 +34,18 @@ insert into public.profile_scopes values
 insert into public.grade_benchmark_settings(scope,average_threshold,pass_rate_threshold,updated_by)
 values('faculty',70,80,'00000000-0000-0000-0000-000000000001') on conflict(scope) do nothing;
 
+insert into public.tracker_templates(id,name,description,type,category,scope,owner_id) values
+ ('60000000-0000-0000-0000-000000000001','End-of-term grade submission','Reusable faculty schedule for reminders, grade collection, and review.','grade_submission','Administrative','faculty','00000000-0000-0000-0000-000000000001')
+on conflict(id) do nothing;
+
+insert into public.tracker_template_stages(id,template_id,title,description,due_offset_days,is_required,sort_order) values
+ ('61000000-0000-0000-0000-000000000001','60000000-0000-0000-0000-000000000001','Initial reminder email','Send submission instructions to instructors.',0,true,1),
+ ('61000000-0000-0000-0000-000000000002','60000000-0000-0000-0000-000000000001','Final exams end','End of the official examination period.',25,true,2),
+ ('61000000-0000-0000-0000-000000000003','60000000-0000-0000-0000-000000000001','Follow-up email','Contact instructors with outstanding submissions.',28,false,3),
+ ('61000000-0000-0000-0000-000000000004','60000000-0000-0000-0000-000000000001','Grades due to Registrar','Final deadline for grade submission.',30,true,4),
+ ('61000000-0000-0000-0000-000000000005','60000000-0000-0000-0000-000000000001','Dean review','Review distributions and anomaly flags.',32,true,5)
+on conflict(id) do nothing;
+
 insert into public.trackers(id,title,type,category,description,organization_unit_id,created_by,created_at) values
  ('20000000-0000-0000-0000-000000000001','Fall 2026 Grade Submission Portal','grade_submission','Administrative','Faculty-wide portal to upload, compare, and analyze Fall 2026 course grade submissions against historical standards.','10000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000001','2026-08-15'),
  ('20000000-0000-0000-0000-000000000002','MSc Defense Tracker','general','Academic','Scheduling and milestone tracking for a Master''s thesis defense.','10000000-0000-0000-0000-000000000002','00000000-0000-0000-0000-000000000001','2026-08-20'),

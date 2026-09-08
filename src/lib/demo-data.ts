@@ -1,4 +1,4 @@
-import type { Course, Profile, Tracker } from './types';
+import type { Course, ImportantDate, Profile, Tracker, TrackerTemplate } from './types';
 
 const term = (average: number, passRate: number, enrolled: number, distribution: [number, number, number, number, number]) => ({
   average, passRate, enrolled,
@@ -48,3 +48,27 @@ export const demoProfiles: Profile[] = [demoProfile,
   { id:'p3', fullName:'Prof. Karen Vance', email:'karen.vance@ontariotechu.ca', role:'chair', organizationUnit:'Business Administration', isActive:true },
   { id:'p4', fullName:'Dr. Samantha Wu', email:'samantha.wu@ontariotechu.ca', role:'research_lead', organizationUnit:'Information Technology', isActive:true },
 ];
+
+export const demoImportantDates: ImportantDate[] = [
+  { id:'important-f26-lectures-begin',academicYear:'2026-27',semester:'Fall',startsOn:'2026-09-08',endsOn:'2026-09-08',shortName:'Fall Lectures Begin',description:'Lectures begin for all programs, fall semester.',sortOrder:1,sourceFileName:'Important Dates 2026-27.xlsx',updatedAt:'2026-09-01' },
+  { id:'important-f26-study-week',academicYear:'2026-27',semester:'Fall',startsOn:'2026-10-13',endsOn:'2026-10-18',shortName:'Fall Study Week',description:'Fall study week; no scheduled academic activities.',sortOrder:2,sourceFileName:'Important Dates 2026-27.xlsx',updatedAt:'2026-09-01' },
+];
+
+export const demoTrackerTemplates: TrackerTemplate[] = [{
+  id: 'template-grade-cycle',
+  name: 'End-of-term grade submission',
+  description: 'Reusable faculty schedule for reminders, grade collection, and review.',
+  type: 'grade-submission',
+  category: 'Administrative',
+  scope: 'faculty',
+  ownerId: demoProfile.id,
+  ownerName: demoProfile.fullName,
+  createdAt: '2026-08-15',
+  stages: [
+    { id:'ts1',title:'Initial reminder email',description:'Send submission instructions to instructors.',dueOffsetDays:0,isRequired:true,sortOrder:1 },
+    { id:'ts2',title:'Final exams end',description:'End of the official examination period.',dueOffsetDays:25,isRequired:true,sortOrder:2 },
+    { id:'ts3',title:'Follow-up email',description:'Contact instructors with outstanding submissions.',dueOffsetDays:28,isRequired:false,sortOrder:3 },
+    { id:'ts4',title:'Grades due to Registrar',description:'Final deadline for grade submission.',dueOffsetDays:30,isRequired:true,sortOrder:4 },
+    { id:'ts5',title:'Dean review',description:'Review distributions and anomaly flags.',dueOffsetDays:32,isRequired:true,sortOrder:5 },
+  ],
+}];
