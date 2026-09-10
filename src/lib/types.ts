@@ -106,6 +106,21 @@ export interface TermMetrics {
   gradeFingerprint?: string;
 }
 
+export interface CourseTermDetails {
+  section: string;
+  instructorId?: string;
+  instructor: string;
+  instructorEmail?: string;
+}
+
+export interface CourseEditDraft {
+  code: string;
+  title: string;
+  department: string;
+  section: string;
+  instructorId?: string;
+}
+
 export interface Course {
   id: string;
   code: string;
@@ -114,6 +129,7 @@ export interface Course {
   instructor: string;
   instructorEmail?: string;
   terms: Record<string, TermMetrics | undefined>;
+  termDetails?: Record<string, CourseTermDetails | undefined>;
 }
 
 export interface SubmissionOverride {
@@ -144,6 +160,8 @@ export interface GradeCsvResult {
   grades: number[];
   preview: Array<{ row: number; studentId: string; name: string; grade: number }>;
   errors: string[];
+  warnings: string[];
+  ignoredRows: number;
   courseCode?: string;
   courseTitle?: string;
   semesterId?: string;

@@ -20,7 +20,7 @@ import { courseCodesMatch, gradeMetrics, parseGradeFile } from '../lib/domain';
 import { demoMode } from '../lib/supabase';
 import type { GradeCsvResult } from '../lib/types';
 
-const emptyFileResult: GradeCsvResult = { grades: [], preview: [], errors: [] };
+const emptyFileResult: GradeCsvResult = { grades: [], preview: [], errors: [], warnings: [], ignoredRows: 0 };
 
 export function PublicSubmissionPage() {
   const { profile } = useAuth();
@@ -156,6 +156,7 @@ export function PublicSubmissionPage() {
             </div>}
 
             {(fileResult.errors.length > 0 || courseMismatch) && <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-xs text-red-800" role="alert"><p className="font-extrabold">Please fix the following:</p><ul className="mt-2 list-disc space-y-1 pl-4">{courseMismatch && <li>The entered course code does not match {fileResult.courseCode} in the file.</li>}{fileResult.errors.slice(0, 6).map((message) => <li key={message}>{message}</li>)}{fileResult.errors.length > 6 && <li>{fileResult.errors.length - 6} more file errors</li>}</ul></div>}
+            {fileResult.warnings.length > 0 && <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-900" role="status"><p className="font-extrabold">File adjustments</p><ul className="mt-2 list-disc space-y-1 pl-4">{fileResult.warnings.slice(0, 6).map((message) => <li key={message}>{message}</li>)}{fileResult.warnings.length > 6 && <li>{fileResult.warnings.length - 6} more adjustment(s)</li>}</ul></div>}
 
             {demoMode && <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-[11px] leading-5 text-amber-900"><b>Demo details:</b> INFT 1020U · Dr. Alex Mercer · alex.mercer@ontariotechu.ca</div>}
 

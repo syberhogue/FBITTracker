@@ -22,12 +22,24 @@ const GRADE_CSV_DATA_HEADERS = [
   'Student ID',
   'Final Grade (%)',
   'Final Letter Grade',
+  'Student Name',
 ] as const;
 
-const EMPTY_GRADE_RESULT: GradeCsvResult = { grades: [], preview: [], errors: [] };
+const EMPTY_GRADE_RESULT: GradeCsvResult = { grades: [], preview: [], errors: [], warnings: [], ignoredRows: 0 };
 
 function normalizeGradeHeader(value: unknown) {
-  return String(value ?? '').replace(/^\ufeff/, '').trim().replace(/\s+/g, ' ');
+  const header = String(value ?? '').replace(/^\ufeff/, '').trim().replace(/\s+/g, ' ');
+  const key = header.toLowerCase().replace(/\s*,\s*/g, ', ').replace(/\s*\(\s*/g, ' (').replace(/\s*\)\s*/g, ')');
+  const aliases: Record<string, string> = {
+    'semester id': 'Semester ID', semester: 'Semester ID', term: 'Semester ID',
+    'course code': 'Course Code', 'course code/number': 'Course Code', 'course number': 'Course Code',
+    'last name': 'Last Name', surname: 'Last Name', 'first name': 'First Name',
+    'last name, first name': 'Student Name', 'student name': 'Student Name',
+    section: 'Section', 'student id': 'Student ID', 'student number': 'Student ID',
+    'final grade (%)': 'Final Grade (%)', 'final grade %': 'Final Grade (%)', 'final grade': 'Final Grade (%)',
+    'final letter grade': 'Final Letter Grade', 'letter grade': 'Final Letter Grade',
+  };
+  return aliases[key] ?? header;
 }
 
 export interface InferredCourseCode {
@@ -111,48 +123,75 @@ export function findCourseByCode<T extends { code: string }>(uploadedCode: strin
   return matches.length === 1 ? matches[0] : undefined;
 }
 
-function parseGradeRows(headers: string[], rows: Array<{ row: number; values: Record<string, unknown> }>, initialErrors: string[] = []): GradeCsvResult {
+function numericGrade(value: unknown): { value: number; explicitPercent: boolean } | undefined {
+  if (typeof value === 'number') return Number.isFinite(value) ? { value, explicitPercent: false } : undefined;
+  const text = String(value ?? '').trim();
+  if (!text) return undefined;
+  const explicitPercent = text.endsWith('%');
+  const parsed = Number(explicitPercent ? text.slice(0, -1).trim() : text);
+  return Number.isFinite(parsed) ? { value: parsed, explicitPercent } : undefined;
+}
+
+function parseGradeRows(headers: string[], rows: Array<{ row: number; values: Record<string, unknown> }>, initialErrors: string[] = [], initialWarnings: string[] = [], initialIgnoredRows = 0): GradeCsvResult {
   const errors = [...initialErrors];
+  const warnings = [...initialWarnings];
   const fields = new Set(headers.map(normalizeGradeHeader));
-  GRADE_CSV_HEADERS.filter((header) => header !== 'First Name').forEach((header) => {
+  GRADE_CSV_HEADERS.filter((header) => !['First Name','Last Name'].includes(header)).forEach((header) => {
     if (!fields.has(header)) errors.push(`Missing required header: ${header}`);
   });
-  if (!fields.has('First Name') && !fields.has('Section')) errors.push('Missing required header: First Name or Section');
+  if (!fields.has('Last Name') && !fields.has('Student Name')) errors.push('Missing required header: Last Name or Last Name, First Name');
+  if (!fields.has('First Name') && !fields.has('Section') && !fields.has('Student Name')) errors.push('Missing required header: First Name, Section, or Last Name, First Name');
 
   const populatedRows = rows.filter(({ values }) => GRADE_CSV_DATA_HEADERS.some((header) => String(values[header] ?? '').trim()));
   if (!populatedRows.length) errors.push('No grade rows were found.');
   if (populatedRows.length > 5000) errors.push('File exceeds the 5,000-row limit.');
+
+  const gradeCandidates = populatedRows
+    .map(({ values }) => numericGrade(values['Final Grade (%)']))
+    .filter((grade): grade is { value: number; explicitPercent: boolean } => Boolean(grade && grade.value >= 0 && grade.value <= 100));
+  const fractionalScale = gradeCandidates.length > 0 && gradeCandidates.every((grade) => !grade.explicitPercent && grade.value >= 0 && grade.value <= 1);
+  if (fractionalScale) warnings.push('Detected Excel percentage values between 0 and 1; converted them to the 0–100 grade scale.');
 
   const seen = new Set<string>();
   const courseCodes = new Map<string, string>();
   const semesterIds = new Map<string, string>();
   const preview: GradeCsvResult['preview'] = [];
   const grades: number[] = [];
+  let ignoredRows = initialIgnoredRows;
   populatedRows.slice(0, 5000).forEach(({ row: rowNumber, values }) => {
     const semesterId = String(values['Semester ID'] ?? '').trim();
     const courseCode = String(values['Course Code'] ?? '').trim().replace(/\s+/g, ' ');
     const studentId = String(values['Student ID'] ?? '').trim();
-    const name = String(values['Last Name'] ?? '').trim();
-    const gradeText = String(values['Final Grade (%)'] ?? '').trim();
-    const grade = Number(gradeText);
+    const name = String(values['Student Name'] ?? values['Last Name'] ?? '').trim();
+    const parsedGrade = numericGrade(values['Final Grade (%)']);
+    const grade = parsedGrade ? parsedGrade.value * (fractionalScale ? 100 : 1) : undefined;
     const inferredTerm = inferAcademicTerm(semesterId);
-    if (!semesterId) errors.push(`Row ${rowNumber}: Semester ID is required.`);
-    else if (!inferredTerm) errors.push(`Row ${rowNumber}: Semester ID must identify Fall, Winter, or Spring/Summer and a two- or four-digit year.`);
-    else semesterIds.set(inferredTerm, inferredTerm);
     const inferredCourse = inferCourseCode(courseCode);
-    if (!courseCode) errors.push(`Row ${rowNumber}: Course Code is required.`);
-    else if (!inferredCourse) errors.push(`Row ${rowNumber}: Course Code must contain four letters followed by four numbers and an optional U or G.`);
-    else courseCodes.set(inferredCourse.canonical, courseCode);
-    if (!studentId) errors.push(`Row ${rowNumber}: Student ID is required.`);
-    else if (seen.has(studentId)) errors.push(`Row ${rowNumber}: duplicate Student ID.`);
-    else seen.add(studentId);
-    if (!name) errors.push(`Row ${rowNumber}: Last Name is required.`);
-    if (!gradeText || !Number.isFinite(grade) || grade < 0 || grade > 100) errors.push(`Row ${rowNumber}: Final Grade (%) must be between 0 and 100.`);
-    else {
-      grades.push(grade);
-      if (preview.length < 8) preview.push({ row: rowNumber, studentId, name, grade });
+    const reasons: string[] = [];
+    if (!semesterId) reasons.push('Semester ID is missing');
+    else if (!inferredTerm) reasons.push('Semester ID is invalid');
+    if (!courseCode) reasons.push('Course Code is missing');
+    else if (!inferredCourse) reasons.push('Course Code is invalid');
+    if (!studentId) reasons.push('Student ID is missing');
+    else if (seen.has(studentId)) reasons.push('Student ID is duplicated');
+    if (!name) reasons.push('student name is missing');
+    if (grade === undefined || !Number.isFinite(grade) || grade < 0 || grade > 100) reasons.push('Final Grade (%) is not between 0 and 100');
+    if (reasons.length) {
+      ignoredRows += 1;
+      if (warnings.length < 21) warnings.push(`Row ${rowNumber} ignored: ${reasons.join('; ')}.`);
+      return;
     }
+
+    seen.add(studentId);
+    courseCodes.set(inferredCourse!.canonical, courseCode);
+    semesterIds.set(inferredTerm!, inferredTerm!);
+    grades.push(grade!);
+    if (preview.length < 8) preview.push({ row: rowNumber, studentId, name, grade: grade! });
   });
+
+  const reportedIgnoredRows = warnings.filter((warning) => /^Row \d+ ignored:/.test(warning)).length;
+  if (ignoredRows > reportedIgnoredRows) warnings.push(`${ignoredRows - reportedIgnoredRows} additional invalid row(s) were ignored.`);
+  if (populatedRows.length && !grades.length) errors.push('No valid grade rows were found.');
 
   if (courseCodes.size > 1) errors.push('The grade file contains multiple Course Code values. Upload one course per file.');
   if (semesterIds.size > 1) errors.push('The grade file contains multiple Semester ID values. Upload one semester per file.');
@@ -161,6 +200,8 @@ function parseGradeRows(headers: string[], rows: Array<{ row: number; values: Re
     grades,
     preview,
     errors: [...new Set(errors)],
+    warnings: [...new Set(warnings)],
+    ignoredRows,
     courseCode: courseCodes.size === 1 ? [...courseCodes.keys()][0] : undefined,
     courseTitle: courseCodes.size === 1 ? inferCourseCode([...courseCodes.values()][0])?.title : undefined,
     semesterId: semesterIds.size === 1 ? [...semesterIds.values()][0] : undefined,
@@ -249,16 +290,18 @@ export function failureRate(metrics: Pick<TermMetrics, 'enrolled' | 'distributio
 
 export function parseGradeCsv(file: File): Promise<GradeCsvResult> {
   return new Promise((resolve) => {
-    if (file.size > 5 * 1024 * 1024) return resolve({ grades: [], preview: [], errors: ['File exceeds the 5 MB limit.'] });
+    if (file.size > 5 * 1024 * 1024) return resolve({ ...EMPTY_GRADE_RESULT, errors: ['File exceeds the 5 MB limit.'] });
     Papa.parse<GradeCsvRow>(file, {
       header: true,
       skipEmptyLines: 'greedy',
       transformHeader: normalizeGradeHeader,
       complete: ({ data, meta, errors: parserErrors }) => {
-        const errors = parserErrors.map((error) => `Row ${error.row ?? '?'}: ${error.message}`);
-        resolve(parseGradeRows(meta.fields ?? [], data.map((values, index) => ({ row: index + 2, values })), errors));
+        const fatalErrors = parserErrors.filter((error) => error.row === undefined).map((error) => error.message);
+        const malformedRows = new Set(parserErrors.filter((error) => error.row !== undefined).map((error) => Number(error.row) + 2));
+        const warnings = parserErrors.filter((error) => error.row !== undefined).map((error) => `Row ${Number(error.row) + 2} ignored: malformed CSV data (${error.message}).`);
+        resolve(parseGradeRows(meta.fields ?? [], data.map((values, index) => ({ row: index + 2, values })).filter(({ row }) => !malformedRows.has(row)), fatalErrors, warnings, malformedRows.size));
       },
-      error: (error) => resolve({ grades: [], preview: [], errors: [error.message] }),
+      error: (error) => resolve({ ...EMPTY_GRADE_RESULT, errors: [error.message] }),
     });
   });
 }

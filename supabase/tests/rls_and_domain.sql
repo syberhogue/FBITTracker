@@ -1,5 +1,5 @@
 begin;
-select plan(78);
+select plan(92);
 
 select has_table('public','trackers','trackers exists');
 select has_table('public','grade_entries','de-identified grade entries exist');
@@ -13,10 +13,13 @@ select has_function('public','submit_public_grade_upload',array['text','text','t
 select has_function('public','resolve_grade_course',array['text','text','text'],'course resolution RPC exists');
 select has_function('public','create_academic_term',array['text','text','date','date','boolean'],'academic term creation RPC exists');
 select has_function('public','delete_course_term_grades',array['uuid','text'],'course-term grade deletion RPC exists');
+select has_function('public','update_course_details',array['uuid','text','text','text','text','text','uuid'],'course editing RPC exists');
+select has_function('public','remove_course_scope',array['uuid','text','text'],'scoped course removal RPC exists');
 select has_function('public','import_important_dates',array['text','text','jsonb'],'important date import RPC exists');
 select has_function('public','save_tracker_template',array['uuid','text','text','tracker_type','tracker_category','text','jsonb'],'template save RPC exists');
 select has_function('public','create_tracker_from_template',array['uuid','text','text','date'],'template application RPC exists');
 select col_is_pk('public','profiles','id','profiles use auth user primary key');
+select has_column('public','course_terms','section','course sections are stored per term');
 select ok((select relrowsecurity from pg_class where oid='public.trackers'::regclass),'trackers RLS enabled');
 select ok((select relrowsecurity from pg_class where oid='public.grade_entries'::regclass),'grade entries RLS enabled');
 select ok((select relrowsecurity from pg_class where oid='public.public_grade_submissions'::regclass),'public submission receipts use RLS');
@@ -36,6 +39,9 @@ select throws_ok($$insert into public.stage_links(tracker_id,stage_id,title,url,
 set local role authenticated;
 set local "request.jwt.claim.sub" = '00000000-0000-0000-0000-000000000001';
 select results_eq($$select count(*)::bigint from public.trackers$$,array[3::bigint],'Dean can read every tracker');
+select lives_ok($$select public.update_course_details('40000000-0000-0000-0000-000000000002','F26','BUSI1100','Introduction to Business Operations','Business Administration','002','00000000-0000-0000-0000-000000000003')$$,'Dean can edit global and term-specific course details');
+select results_eq($$select count(*)::bigint from public.courses c join public.course_terms ct on ct.course_id=c.id where c.id='40000000-0000-0000-0000-000000000002' and c.code='BUSI 1100U' and ct.term_code='F26' and ct.section='002' and ct.instructor_id='00000000-0000-0000-0000-000000000003'$$,array[1::bigint],'Course edits persist global fields and term-specific assignment fields');
+select lives_ok($$insert into public.submission_status_overrides(course_id,term_code,status,reason) values('40000000-0000-0000-0000-000000000002','F26','outstanding','Testing scoped course removal')$$,'Dean can create an override that will be removed with the term');
 select lives_ok($$select public.save_tracker_template(null,'Faculty review cycle','Reusable review workflow','general','Administrative','faculty','[{"title":"Request submission","description":"Send request","due_offset_days":0,"is_required":true},{"title":"Complete review","description":"Review response","due_offset_days":7,"is_required":true}]'::jsonb)$$,'Dean can create a faculty template');
 select results_eq($$select count(*)::bigint from public.tracker_templates where name='Faculty review cycle' and scope='faculty'$$,array[1::bigint],'Faculty template is stored once');
 select lives_ok($$select public.import_important_dates('2026-27','Important Dates 2026-27.xlsx','[{"semester":"Fall","starts_on":"2026-09-08","ends_on":"2026-09-08","short_name":"Fall Lectures Begin","description":"Lectures begin."},{"semester":"Fall","starts_on":"2026-09-08","ends_on":"2026-09-08","short_name":"Fall Fees Due","description":"Fall semester fees due."}]'::jsonb)$$,'Dean can import important dates');
@@ -69,6 +75,11 @@ select results_eq($$select public.resolve_grade_course('INFR 1100','Network Fund
 select throws_ok($$select public.submit_grade_upload('50000000-0000-0000-0000-000000000002',array[85,75]::numeric[])$$,'42501','Not authorized for this course term','Instructor cannot submit grades for another course');
 select throws_ok($$select public.delete_course_term_grades('40000000-0000-0000-0000-000000000002','F26')$$,'42501','Not authorized to delete grades for this course term.','Instructor cannot delete another instructor''s grade data');
 select throws_ok($$select public.create_academic_term('F27','Fall 2027',date '2027-09-01',date '2027-12-20',false)$$,'42501','Only deans and academic directors can create academic terms.','Instructor cannot create an academic term');
+select throws_ok($$select public.update_course_details('40000000-0000-0000-0000-000000000002','F26','BUSI1100','Unauthorized change','Business Administration','003',null)$$,'42501','Not authorized to edit this course.','Instructor cannot edit another course');
+select throws_ok($$select public.remove_course_scope('40000000-0000-0000-0000-000000000002','F26','term')$$,'42501','Not authorized to remove this course.','Instructor cannot remove another course from a term');
+select lives_ok($$delete from public.courses where id='40000000-0000-0000-0000-000000000002'$$,'Instructor course deletion is safely filtered by RLS');
+reset role;
+select results_eq($$select count(*)::bigint from public.courses where id='40000000-0000-0000-0000-000000000002'$$,array[1::bigint],'Instructor cannot remove another course');
 
 set local role anon;
 select throws_ok($$select count(*) from public.public_grade_submissions$$,'42501',null,'Anonymous callers cannot read public submission receipts');
@@ -92,6 +103,18 @@ select results_eq($$select count(*)::bigint from public.courses where code='CSCI
 select results_eq($$select count(*)::bigint from public.course_terms ct join public.courses c on c.id=ct.course_id where c.code='CSCI 2000U' and ct.instructor_id='00000000-0000-0000-0000-000000000002' and ct.term_code='W26'$$,array[1::bigint],'New public course is assigned to the verified faculty member in the uploaded file term');
 select results_eq($$select count(*)::bigint from public.courses where code='INFR 1100U'$$,array[1::bigint],'Authenticated new-course resolution persists the canonical course');
 select results_eq($$select count(*)::bigint from public.stage_links$$,array[0::bigint],'Removed stage links no longer appear');
+
+set local role authenticated;
+set local "request.jwt.claim.sub" = '00000000-0000-0000-0000-000000000001';
+select lives_ok($$select public.remove_course_scope('40000000-0000-0000-0000-000000000002','F26','term')$$,'Dean can remove a course from one term');
+reset role;
+select results_eq($$select (exists(select 1 from public.courses where id='40000000-0000-0000-0000-000000000002') and not exists(select 1 from public.course_terms where course_id='40000000-0000-0000-0000-000000000002' and term_code='F26') and not exists(select 1 from public.grade_submission_targets where course_term_id='50000000-0000-0000-0000-000000000002') and not exists(select 1 from public.submission_status_overrides where course_id='40000000-0000-0000-0000-000000000002' and term_code='F26'))$$,array[true],'Term removal preserves course history while cascading term data and its override');
+
+set local role authenticated;
+set local "request.jwt.claim.sub" = '00000000-0000-0000-0000-000000000001';
+select lives_ok($$select public.remove_course_scope((select id from public.courses where code='CSCI 2000U'),'W26','history')$$,'Dean can delete an entire course history');
+reset role;
+select results_eq($$select (not exists(select 1 from public.courses where code='CSCI 2000U') and (select count(*) from public.public_grade_submissions)=1)$$,array[true],'Deleting a course cascades to its term and public grade submission data');
 
 select * from finish();
 rollback;

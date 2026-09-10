@@ -20,6 +20,61 @@ test('faculty can validate and submit a grade file from the public page', async 
   await expect(page.getByText(/F26 · 2 grades/)).toBeVisible();
 });
 
+test('real-world grade columns and invalid rows are normalized without blocking valid grades', async ({ page }) => {
+  await page.goto('/');
+  await page.getByLabel('Course code / number').fill('BUSI1100');
+  await page.getByLabel('Faculty full name').fill('Prof. Karen Vance');
+  await page.getByLabel('Faculty email').fill('karen.vance@ontariotechu.ca');
+  await page.getByLabel('Grade file').setInputFiles({
+    name: 'reordered-real-world-grades.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from('Final Letter Grade,Student Number,"Last Name, First Name",Final Grade,Course Code,Semester\nA,1001,"Doe, Jane",0.88,BUSI1100,202605\nA,,"Invalid, Row",0.82,BUSI1100,202605\nB,1002,"Roe, Jordan",0.72,BUSI 1100U,202605'),
+  });
+  await expect(page.getByText('File validated')).toBeVisible();
+  await expect(page.getByText('2 grades', { exact: true })).toBeVisible();
+  await expect(page.getByText(/converted them to the 0–100 grade scale/)).toBeVisible();
+  await expect(page.getByText(/Row 3 ignored: Student ID is missing/)).toBeVisible();
+});
+
+test('an unknown spreadsheet term can be mapped or created before grade submission', async ({ page }) => {
+  await page.goto('/dashboard');
+  await page.getByRole('link', { name: 'Fall 2026 Grade Submission Portal' }).click();
+  await page.getByRole('link', { name: 'Grade analytics' }).click();
+
+  await page.getByRole('button', { name: 'Upload grades', exact: true }).click();
+  await page.locator('input[type="file"]').setInputFiles({
+    name: 'future-grades.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from('Semester ID,Course Code,Last Name,Section,Student ID,Final Grade (%),Final Letter Grade\nF 2030,INFR9999U,Doe,001,1001,88,A'),
+  });
+  await expect(page.getByText('Term F30 is not configured.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Submit de-identified grades' })).toBeDisabled();
+  await page.getByLabel('Destination academic term').selectOption('F26');
+  await expect(page.getByText('Spreadsheet term F30 will be imported into F26.')).toBeVisible();
+  await page.getByRole('button', { name: 'Submit de-identified grades' }).click();
+  await expect(page.getByLabel('Active term')).toHaveValue('F26');
+  await expect(page.getByRole('status')).toContainText('for F26');
+
+  await page.getByRole('button', { name: 'Upload grades', exact: true }).click();
+  await page.locator('input[type="file"]').setInputFiles({
+    name: 'new-term-grades.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from('Semester ID,Course Code,Last Name,Section,Student ID,Final Grade (%),Final Letter Grade\nSpring 2031,INFR9999U,Roe,001,1002,82,A-'),
+  });
+  await page.getByRole('button', { name: 'Create S31 term' }).click();
+  await expect(page.getByLabel('Term code')).toHaveValue('S31');
+  await page.getByLabel('Term name').fill('Spring/Summer 2031');
+  await page.getByLabel('Start date').fill('2031-05-05');
+  await page.getByLabel('End date').fill('2031-08-29');
+  await page.getByLabel('Create academic term').getByRole('button', { name: 'Create term', exact: true }).click();
+  await expect(page.getByText('Academic term S31 was created and selected for this upload.', { exact: true })).toBeVisible();
+  await expect(page.getByText(/destination term S31/)).toBeVisible();
+  await page.getByRole('button', { name: 'Submit de-identified grades' }).click();
+  await expect(page.getByLabel('Active term')).toHaveValue('S31');
+  await page.reload();
+  await expect(page.getByLabel('Active term')).toHaveValue('S31');
+});
+
 test('dashboard and grade analytics remain available at the staff route', async ({ page }) => {
   await page.goto('/dashboard');
   await expect(page.getByRole('heading', { name: 'Process Dashboard' })).toBeVisible();
@@ -41,12 +96,34 @@ test('dashboard and grade analytics remain available at the staff route', async 
   await page.getByLabel('Create academic term').getByRole('button', { name: 'Create term', exact: true }).click();
   await expect(page.getByLabel('Active term')).toHaveValue('S27');
   await expect(page.getByRole('status')).toContainText('Academic term S27 created and selected.');
-  await expect(page.getByRole('button', { name: 'Delete current-term data' })).toBeDisabled();
+  await page.reload();
+  await expect(page.getByLabel('Active term')).toHaveValue('S27');
   await page.getByLabel('Active term').selectOption('F26');
-  await page.getByRole('button', { name: 'Delete current-term data' }).click();
-  await expect(page.getByText(/permanently removes all uploaded grade versions/)).toBeVisible();
-  await page.getByRole('button', { name: 'Delete grade data' }).click();
-  await expect(page.getByText('No grade submission for INFT 1020U in F26.')).toBeVisible();
+  await page.getByRole('button', { name: 'Edit INFT 1020U' }).click();
+  await page.getByLabel('Course title').fill('Data Structures and Algorithms');
+  await page.getByLabel('Section · F26').fill('002');
+  await page.getByRole('button', { name: 'Save course' }).click();
+  await expect(page.getByRole('status')).toContainText('Updated INFT 1020U for F26.');
+  await expect(page.getByText('Data Structures and Algorithms', { exact: true }).first()).toBeVisible();
+
+  await page.getByRole('tab', { name: 'Multi-course compare' }).click();
+  await page.getByLabel('Search available courses').fill('BUSI 1100');
+  await page.getByRole('button', { name: /BUSI 1100U/ }).click();
+  await expect(page.getByText('2 selected for F26')).toBeVisible();
+  await page.getByRole('button', { name: 'Deselect all' }).click();
+  await expect(page.getByText('No courses selected.')).toBeVisible();
+  await page.getByRole('button', { name: /Select all/ }).click();
+  await expect(page.getByText('5 selected for F26')).toBeVisible();
+
+  await page.getByRole('tab', { name: 'Threshold finder' }).click();
+  await expect(page.getByRole('heading', { name: 'Threshold finder · F26' })).toBeVisible();
+  await page.getByLabel('Metric').selectOption('failureRate');
+  await page.getByLabel('Condition').selectOption('above');
+  await page.getByLabel('Threshold (%)').fill('15');
+  await expect(page.getByText('Failure rate above 15%')).toBeVisible();
+  await expect(page.getByText('Courses meeting criteria')).toBeVisible();
+
+  await page.getByRole('tab', { name: 'Single course vs history' }).click();
   await page.getByRole('button', { name: 'Upload grades', exact: true }).click();
   await page.locator('input[type="file"]').setInputFiles({
     name: 'winter-grades.csv',
@@ -57,6 +134,18 @@ test('dashboard and grade analytics remain available at the staff route', async 
   await page.getByRole('button', { name: 'Submit de-identified grades' }).click();
   await expect(page.getByLabel('Active term')).toHaveValue('W26');
   await expect(page.getByRole('status')).toContainText('for W26');
+  await page.getByRole('button', { name: 'Remove selected course INFT 1020U' }).click();
+  await expect(page.getByRole('heading', { name: 'Remove INFT 1020U' })).toBeVisible();
+  await expect(page.getByText('Remove from W26 only')).toBeVisible();
+  await expect(page.getByText('Delete entire course history')).toBeVisible();
+  await page.getByRole('button', { name: 'Remove from W26' }).click();
+  await expect(page.getByRole('status')).toContainText('Removed INFT 1020U from W26.');
+  await expect(page.getByText('No grade submission for INFT 1020U in W26.')).toBeVisible();
+  await page.getByRole('button', { name: 'Remove selected course INFT 1020U' }).click();
+  await page.getByRole('radio', { name: 'Delete entire course history' }).check();
+  await page.getByRole('button', { name: 'Delete entire history' }).click();
+  await expect(page.getByRole('status')).toContainText('Deleted INFT 1020U and its entire history.');
+  await expect(page.getByRole('button', { name: 'Remove selected course INFT 1020U' })).toHaveCount(0);
 });
 
 test('a stage accepts multiple URL attachments and allows individual removal', async ({ page }) => {

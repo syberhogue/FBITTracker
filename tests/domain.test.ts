@@ -75,14 +75,36 @@ describe('grade calculations and CSV privacy gate', () => {
     expect(result.preview[0]).toMatchObject({ studentId: '1001', name: 'Doe, Jane', grade: 92.5 });
   });
 
-  it('rejects missing headers, duplicate IDs, blanks, non-numeric values, and invalid grades', async () => {
+  it('rejects missing headers but ignores invalid student rows', async () => {
     const missing = await parseGradeCsv(csvFile('Semester ID,Course Code,Last Name,First Name,Student ID\n202609,INFT 1000U,Doe,Alex,1'));
     expect(missing.errors).toContain('Missing required header: Final Grade (%)');
     expect(missing.errors).toContain('Missing required header: Final Letter Grade');
     const invalid = await parseGradeCsv(csvFile('Semester ID,Course Code,Last Name,Section,Student ID,Final Grade (%),Final Letter Grade\n202609,INFT 1000U,Jane,001,1,101,A\n202609,INFT 1000U,,001,1,abc,F\n202609,INFT 1000U,John,001,2,,F'));
-    expect(invalid.errors.join(' ')).toMatch(/duplicate Student ID/);
-    expect(invalid.errors.join(' ')).toMatch(/Last Name is required/);
-    expect(invalid.errors.filter((message) => message.includes('Final Grade (%)'))).toHaveLength(3);
+    expect(invalid.grades).toEqual([]);
+    expect(invalid.ignoredRows).toBe(3);
+    expect(invalid.errors).toContain('No valid grade rows were found.');
+    expect(invalid.warnings.join(' ')).toMatch(/student name is missing/);
+    expect(invalid.warnings.join(' ')).toMatch(/Final Grade \(%\) is not between 0 and 100/);
+  });
+
+  it('accepts reordered columns, combined names, YearMonth terms, and Excel fractional percentages', async () => {
+    const result = await parseGradeCsv(csvFile('Final Letter Grade,Student Number,"Last Name, First Name",Final Grade,Course Code,Semester\nA,1001,"Doe, Jane",0.88,BUSI1100,202605\nB,1002,"Roe, Jordan",0.72,BUSI 1100U,202605'));
+    expect(result.errors).toEqual([]);
+    expect(result.ignoredRows).toBe(0);
+    expect(result.grades).toEqual([88,72]);
+    expect(result.semesterId).toBe('S26');
+    expect(result.courseCode).toBe('BUSI 1100U');
+    expect(result.preview.map(row=>row.name)).toEqual(['Doe, Jane','Roe, Jordan']);
+    expect(result.warnings).toContain('Detected Excel percentage values between 0 and 1; converted them to the 0–100 grade scale.');
+  });
+
+  it('keeps valid grades when malformed rows are present', async () => {
+    const result = await parseGradeCsv(csvFile('Semester ID,Course Code,Last Name,Section,Student ID,Final Grade (%),Final Letter Grade\n202605,BUSI1100,Doe,1,1001,0.91,A\n202605,BUSI1100,Bad,1,,0.8,A\nnot-a-term,BUSI1100,Wrong,1,1002,0.7,B\n202605,BUSI1100,Roe,1,1003,0.63,C'));
+    expect(result.errors).toEqual([]);
+    expect(result.grades).toEqual([91,63]);
+    expect(result.ignoredRows).toBe(2);
+    expect(result.warnings.join(' ')).toMatch(/Row 3 ignored: Student ID is missing/);
+    expect(result.warnings.join(' ')).toMatch(/Row 4 ignored: Semester ID is invalid/);
   });
 
   it('normalizes surrounding and repeated whitespace in template headers', async () => {
@@ -151,7 +173,8 @@ describe('grade calculations and CSV privacy gate', () => {
     expect(equivalent.semesterId).toBe('W26');
 
     const invalid = await parseGradeCsv(csvFile('Semester ID,Course Code,Last Name,Section,Student ID,Final Grade (%),Final Letter Grade\nAcademic 2026,BUSI1100,Doe,1,1001,88,A'));
-    expect(invalid.errors).toContain('Row 2: Semester ID must identify Fall, Winter, or Spring/Summer and a two- or four-digit year.');
+    expect(invalid.errors).toContain('No valid grade rows were found.');
+    expect(invalid.warnings).toContain('Row 2 ignored: Semester ID is invalid.');
     expect(invalid.semesterId).toBeUndefined();
   });
 });

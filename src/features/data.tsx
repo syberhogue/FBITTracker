@@ -3,7 +3,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { demoCourses, demoImportantDates, demoProfiles, demoTrackers, demoTrackerTemplates } from '../lib/demo-data';
 import { gradeMetrics, normalizeStageLinkUrl } from '../lib/domain';
 import { demoMode, supabase } from '../lib/supabase';
-import type { AcademicTermDraft, AppSettings, Course, ImportantDate, ImportantDateDraft, Profile, Stage, SubmissionOverride, Tracker, TrackerTemplate, TrackerTemplateDraft } from '../lib/types';
+import type { AcademicTermDraft, AppSettings, Course, CourseEditDraft, ImportantDate, ImportantDateDraft, Profile, Stage, SubmissionOverride, Tracker, TrackerTemplate, TrackerTemplateDraft } from '../lib/types';
 import { useAuth } from './auth';
 
 interface DataValue {
@@ -28,6 +28,8 @@ interface DataValue {
   deleteStage(trackerId: string, stageId: string): Promise<void>;
   createAcademicTerm(value: AcademicTermDraft): Promise<string>;
   deleteCourseTermGrades(courseId: string, termCode: string): Promise<number>;
+  updateCourse(courseId: string, termCode: string, value: CourseEditDraft): Promise<void>;
+  removeCourse(courseId: string, termCode: string, scope: 'term' | 'history'): Promise<void>;
   submitGrades(courseCode: string, courseTitle: string | undefined, termCode: string, grades: number[]): Promise<{ duplicate: boolean; courseId: string; courseCode: string; createdCourse: boolean }>;
   setOverride(courseId: string, termCode: string, value?: 'submitted' | 'outstanding', reason?: string): Promise<void>;
   importTargets(trackerId: string, rows: Array<{ CourseCode: string; CourseTitle: string; Instructor: string; Department: string; InstructorEmail?: string }>, sourceFile?: File): Promise<void>;
@@ -44,6 +46,11 @@ interface DataValue {
 
 const DataContext = createContext<DataValue | null>(null);
 const clone = <T,>(value: T): T => structuredClone(value);
+const DEMO_TERMS_KEY='fbit:demo-academic-terms';
+
+function storedDemoTerms(){
+  try{const value=JSON.parse(localStorage.getItem(DEMO_TERMS_KEY)??'[]');return Array.isArray(value)?value.filter((item):item is string=>typeof item==='string'):[];}catch{return[];}
+}
 
 export function DataProvider({ children }: { children: ReactNode }) {
   const { profile } = useAuth();
@@ -54,7 +61,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [importantDates, setImportantDates] = useState<ImportantDate[]>(clone(demoImportantDates));
   const [overrides, setOverrides] = useState<Record<string, SubmissionOverride>>({});
   const [settings, setSettingsState] = useState<AppSettings>({ averageThreshold: 70, passRateThreshold: 80 });
-  const [terms, setTerms] = useState<string[]>(demoMode ? Object.keys(demoCourses[0]?.terms ?? {}) : []);
+  const [terms, setTerms] = useState<string[]>(demoMode ? [...new Set([...storedDemoTerms(),...Object.keys(demoCourses[0]?.terms ?? {})])] : []);
   const [currentTerm, setCurrentTerm] = useState(demoMode ? 'F26' : '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>();
@@ -65,7 +72,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const [trackersResult, coursesResult, profilesResult, termsResult, settingsResult, overridesResult, templatesResult, importantDatesResult] = await Promise.all([
       supabase.from('trackers').select('*, stages(*, documents(*), stage_links(*))').order('created_at'),
       supabase.from('courses').select('*, course_terms(*, instructor:profiles!course_terms_instructor_id_fkey(full_name,email), grade_uploads(*))').order('code'),
-      profile.role === 'dean' ? supabase.from('profiles').select('*, organization_units!profiles_organization_unit_id_fkey(name)').order('full_name') : Promise.resolve({ data: [], error: null }),
+      ['dean','academic_director','chair','program_lead'].includes(profile.role) ? supabase.from('profiles').select('*, organization_units!profiles_organization_unit_id_fkey(name)').order('full_name') : Promise.resolve({ data: [], error: null }),
       supabase.from('academic_terms').select('*').order('starts_on', { ascending: false }),
       supabase.from('grade_benchmark_settings').select('*').is('tracker_id', null).maybeSingle(),
       supabase.from('submission_status_overrides').select('*').is('cleared_at', null),
@@ -83,6 +90,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     setCourses((coursesResult.data ?? []).map((row: any) => ({
       id: row.id, code: row.code, title: row.title, department: row.department,
       instructor: row.course_terms?.[0]?.instructor?.full_name ?? 'Unassigned', instructorEmail: row.course_terms?.[0]?.instructor?.email,
+      termDetails: Object.fromEntries((row.course_terms ?? []).map((ct:any)=>[ct.term_code,{section:ct.section??'',instructorId:ct.instructor_id??undefined,instructor:ct.instructor?.full_name??'Unassigned',instructorEmail:ct.instructor?.email??undefined}])),
       terms: Object.fromEntries((row.course_terms ?? []).map((ct: any) => {
         const upload = (ct.grade_uploads ?? []).find((u: any) => u.is_active);
         return [ct.term_code, upload ? { average:Number(upload.class_average),passRate:Number(upload.pass_rate),enrolled:upload.enrolled_count,distribution:upload.distribution_json,uploadVersion:upload.version,uploadedAt:upload.created_at } : undefined];
@@ -152,7 +160,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       if(demoMode){
         if(!['dean','academic_director'].includes(profile?.role??''))throw new Error('Only deans and academic directors can create academic terms.');
         if(terms.includes(code))throw new Error('That academic term already exists.');
-        setTerms((all)=>[code,...all]);
+        setTerms((all)=>{const next=[code,...all];localStorage.setItem(DEMO_TERMS_KEY,JSON.stringify(next));return next;});
         if(input.isCurrent)setCurrentTerm(code);
         return code;
       }
@@ -161,6 +169,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
     async deleteCourseTermGrades(courseId,termCode) {
       if(demoMode){const hadData=Boolean(courses.find((item)=>item.id===courseId)?.terms[termCode]);setCourses((all)=>all.map((item)=>item.id===courseId?{...item,terms:{...item.terms,[termCode]:undefined}}:item));return hadData?1:0;}
       const{data,error}=await supabase.rpc('delete_course_term_grades',{p_course_id:courseId,p_term_code:termCode});if(error)throw error;await refresh();return Number(data);
+    },
+    async updateCourse(courseId,termCode,input) {
+      if(demoMode){const instructor=profiles.find(item=>item.id===input.instructorId);setCourses(all=>all.map(course=>course.id===courseId?{...course,code:input.code.trim().toUpperCase(),title:input.title.trim(),department:input.department.trim(),instructor:instructor?.fullName??'Unassigned',instructorEmail:instructor?.email,termDetails:{...(course.termDetails??{}),[termCode]:{section:input.section.trim(),instructorId:instructor?.id,instructor:instructor?.fullName??'Unassigned',instructorEmail:instructor?.email}}}:course));return;}
+      const{error}=await supabase.rpc('update_course_details',{p_course_id:courseId,p_term_code:termCode,p_code:input.code,p_title:input.title,p_department:input.department,p_section:input.section,p_instructor_id:input.instructorId??null});if(error)throw error;await refresh();
+    },
+    async removeCourse(courseId,termCode,scope) {
+      if(demoMode){if(scope==='history'){setCourses(all=>all.filter(course=>course.id!==courseId));setOverrides(all=>Object.fromEntries(Object.entries(all).filter(([key])=>!key.startsWith(`${courseId}_`))));}else{setCourses(all=>all.map(course=>course.id===courseId?{...course,terms:Object.fromEntries(Object.entries(course.terms).filter(([key])=>key!==termCode)),termDetails:Object.fromEntries(Object.entries(course.termDetails??{}).filter(([key])=>key!==termCode))}:course));setOverrides(all=>Object.fromEntries(Object.entries(all).filter(([key])=>key!==`${courseId}_${termCode}`)));}return;}
+      const{error}=await supabase.rpc('remove_course_scope',{p_course_id:courseId,p_term_code:termCode,p_scope:scope});if(error)throw error;await refresh();
     },
     async submitGrades(courseCode, courseTitle, termCode, grades) {
       if(demoMode){const existing=courses.find((item)=>item.code.replace(/[^A-Z0-9]/gi,'').toUpperCase()===courseCode.replace(/[^A-Z0-9]/gi,'').toUpperCase());const courseId=existing?.id??crypto.randomUUID();const canonical=courseCode;const metrics=gradeMetrics(grades);const fingerprint=grades.join(',');const current=existing?.terms[termCode];if(existing&&current?.gradeFingerprint===fingerprint)return{duplicate:true,courseId,courseCode:existing.code,createdCourse:false};setCourses((all)=>{const found=all.find((item)=>item.id===courseId);if(found)return all.map((item)=>item.id===courseId?{...item,terms:{...item.terms,[termCode]:{...metrics,uploadVersion:(item.terms[termCode]?.uploadVersion??0)+1,uploadedAt:new Date().toISOString(),gradeFingerprint:fingerprint}}}:item);return[...all,{id:courseId,code:canonical,title:courseTitle||canonical,department:canonical.slice(0,4),instructor:profile?.fullName??'Current user',instructorEmail:profile?.email,terms:{[termCode]:{...metrics,uploadVersion:1,uploadedAt:new Date().toISOString(),gradeFingerprint:fingerprint}}}]});return{duplicate:false,courseId,courseCode:canonical,createdCourse:!existing};}
