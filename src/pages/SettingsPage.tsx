@@ -1,6 +1,8 @@
 import { CalendarRange, ChevronDown, ChevronUp, FileSpreadsheet, Globe2, LayoutTemplate, Pencil, Plus, Save, ShieldCheck, Trash2, UserRound } from 'lucide-react';
 import { useState } from 'react';
 import { Badge, EmptyState, Modal, PageTitle } from '../components/ui';
+import { GraduateResources } from '../components/GraduateResources';
+import { CommitteeMeetingsSettings } from '../components/CommitteeMeetingsSettings';
 import { useAuth } from '../features/auth';
 import { useData } from '../features/data';
 import { formatDate, parseImportantDatesFile } from '../lib/domain';
@@ -26,6 +28,8 @@ export function SettingsPage(){
       </article>)}</div>}
     </section>
 
+    <CommitteeMeetingsSettings/>
+    <GraduateResources manage/>
     {profile?.role==='dean'&&<ImportantDatesSection/>}
 
     {profile?.role==='dean'&&<section className="mt-10" aria-labelledby="benchmark-title"><div className="mb-4"><h2 id="benchmark-title" className="text-sm font-extrabold text-slate-900">Grade benchmark defaults</h2><p className="mt-1 text-xs text-slate-500">Faculty defaults apply unless a grade-submission tracker defines an override.</p></div><form className="card p-6" onSubmit={async e=>{e.preventDefault();await saveSettings({averageThreshold:average,passRateThreshold:pass});setSaved(true)}}><div className="mb-6 flex items-center gap-3 rounded-xl bg-blue-50 p-4 text-[#003C71]"><ShieldCheck/><p className="text-xs"><b>Deterministic review rule:</b> a course is flagged when either metric falls below its configured threshold.</p></div><div className="grid gap-5 sm:grid-cols-2"><label><span className="label">Minimum class average (%)</span><input className="field" type="number" min="0" max="100" step="0.1" value={average} onChange={e=>setAverage(Number(e.target.value))}/></label><label><span className="label">Minimum pass rate (%)</span><input className="field" type="number" min="0" max="100" step="0.1" value={pass} onChange={e=>setPass(Number(e.target.value))}/></label></div><div className="mt-6 flex items-center justify-end gap-3">{saved&&<span className="text-xs font-bold text-emerald-700">Settings saved.</span>}<button className="btn-orange gap-2"><Save size={15}/>Save faculty defaults</button></div></form></section>}

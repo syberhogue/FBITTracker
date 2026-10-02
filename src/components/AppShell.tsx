@@ -1,4 +1,4 @@
-import { BarChart3, ChevronRight, LayoutDashboard, LogOut, Menu, Settings, ShieldCheck, X } from 'lucide-react';
+import { BarChart3, BookOpenCheck, ChevronRight, GraduationCap, LayoutDashboard, LogOut, Menu, Settings, ShieldCheck, X } from 'lucide-react';
 import { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../features/auth';
@@ -11,6 +11,8 @@ export function AppShell(){
   const side=<div className="flex h-full flex-col bg-[#003C71] text-white">
     <div className="border-b border-blue-800/80 p-6"><div className="flex items-center gap-2"><div className="grid h-9 w-9 place-items-center rounded-lg bg-[#EA7600] text-lg font-black shadow">OT</div><div><div className="text-xl font-black leading-none">OntarioTech</div><div className="mt-1 text-[10px] font-extrabold uppercase tracking-[.16em] text-[#EA7600]">FBIT Tracker</div></div></div></div>
     <nav className="flex-1 overflow-y-auto py-4" aria-label="Primary navigation"><NavLink to="/dashboard" end className={navClass} onClick={()=>setOpen(false)}><LayoutDashboard size={19} className="text-[#EA7600]"/>Dashboard Overview</NavLink>
+      <NavLink to="/graduates" className={navClass} onClick={()=>setOpen(false)}><GraduationCap size={19} className="text-[#EA7600]"/>MSc student tracker</NavLink>
+      <NavLink to="/curriculum" className={navClass} onClick={()=>setOpen(false)}><BookOpenCheck size={19} className="text-[#EA7600]"/>Curriculum Change Tracker</NavLink>
       <div className="px-6 pb-2 pt-6 text-[9px] font-black uppercase tracking-[.2em] text-blue-300">Active process trackers</div>
       <div className="space-y-1 px-3">{trackers.map((t)=><NavLink key={t.id} to={`/trackers/${t.id}/timeline`} onClick={()=>setOpen(false)} className={({isActive})=>`flex items-center gap-2 rounded-lg px-3 py-2.5 text-xs font-semibold ${isActive?'bg-blue-800 text-white':'text-blue-100 hover:bg-blue-900/60'}`}><span className={`h-2 w-2 shrink-0 rounded-full ${t.type==='grade-submission'?'bg-[#EA7600]':'bg-blue-300'}`}/><span className="truncate">{t.title}</span><ChevronRight size={13} className="ml-auto shrink-0 opacity-50"/></NavLink>)}</div>
       <div className="mt-6 border-t border-blue-800/60 pt-4"><NavLink to="/settings" className={navClass} onClick={()=>setOpen(false)}><Settings size={18}/>Templates & settings</NavLink>{profile?.role==='dean'&&<NavLink to="/admin/users" className={navClass} onClick={()=>setOpen(false)}><ShieldCheck size={18}/>User administration</NavLink>}</div>

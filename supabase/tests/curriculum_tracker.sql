@@ -1,0 +1,57 @@
+begin;
+select no_plan();
+select has_table('public','curriculum_changes','Curriculum register exists');
+select has_table('public','curriculum_calendars','Committee calendars exist');
+select ok((select relrowsecurity from pg_class where oid='public.curriculum_changes'::regclass),'Changes have RLS');
+select ok((select relrowsecurity from pg_class where oid='public.curriculum_calendars'::regclass),'Calendars have RLS');
+select ok(not has_table_privilege('anon','public.curriculum_changes','SELECT'),'Anonymous users cannot read proposals');
+select ok(not has_table_privilege('anon','public.curriculum_calendars','INSERT'),'Anonymous users cannot write calendars');
+select is((select jsonb_array_length(meetings) from public.curriculum_calendars where academic_year=2026),42,'2026–27 has all 42 supplied and recurring meetings');
+select is((select count(*) from public.curriculum_calendars c cross join lateral jsonb_array_elements(c.meetings) m where m->>'committee'='AC' and not (m->>'voting')::boolean),3::bigint,'Three Academic Council sessions do not permit voting');
+
+set local role authenticated;
+set local "request.jwt.claim.sub" = '00000000-0000-0000-0000-000000000001';
+select lives_ok($$insert into public.curriculum_changes(id,title,change_type,approval_process,organization_unit_id,start_date,implementation_year,stages) values('92000000-0000-0000-0000-000000000001','Curriculum test','New Courses','Standard','10000000-0000-0000-0000-000000000002','2026-09-01',2027,'[{"id":"uec-approval","title":"UEC (Approval)","committee":"UEC","purpose":"Approval","due_date":"2026-10-13","agenda_date":"2026-10-08","completed_on":null,"outcome":"pending","notes":"","links":[]}]')$$,'Dean can create a curriculum change atomically');
+select throws_ok($$update public.curriculum_changes set created_by='00000000-0000-0000-0000-000000000003' where id='92000000-0000-0000-0000-000000000001'$$,'42501',null,'Owners cannot be reassigned');
+select throws_ok($$update public.curriculum_changes set change_type='New Programs' where id='92000000-0000-0000-0000-000000000001'$$,'42501',null,'Template identity cannot be reassigned');
+select throws_ok($$update public.curriculum_changes set description='Stale update' where id='92000000-0000-0000-0000-000000000001'$$,'23514',null,'Writes must advance the version');
+select lives_ok($$update public.curriculum_changes set description='Reviewed proposal',version=2 where id='92000000-0000-0000-0000-000000000001' and version=1$$,'Versioned edits succeed');
+with changed as (update public.curriculum_changes set description='Lost history',version=2 where id='92000000-0000-0000-0000-000000000001' and version=1 returning id) select is((select count(*) from changed),0::bigint,'A stale editor cannot overwrite a newer version');
+select throws_ok($$update public.curriculum_changes set stages='[]',version=3 where id='92000000-0000-0000-0000-000000000001'$$,'23514',null,'Empty workflows are rejected');
+select throws_ok($$update public.curriculum_changes set stages=jsonb_set(stages,'{0,links}','[{"title":"Unsafe","url":"javascript:alert(1)"}]'),version=3 where id='92000000-0000-0000-0000-000000000001'$$,'23514',null,'Unsafe resource links are rejected server-side');
+select throws_ok($$update public.curriculum_changes set stages=jsonb_set(jsonb_set(stages,'{0,outcome}','"approved"'),'{0,completed_on}',to_jsonb((current_date+1)::text)),version=3 where id='92000000-0000-0000-0000-000000000001'$$,'23514',null,'Future actual completions are rejected');
+select throws_ok($$update public.curriculum_changes set stages=jsonb_set(jsonb_set(stages,'{0,committee}','"AC"'),'{0,due_date}','"2026-10-27"'),version=3 where id='92000000-0000-0000-0000-000000000001'$$,'23514',null,'Nonvoting AC sessions cannot be approval deadlines');
+select throws_ok($$update public.curriculum_changes set stages=jsonb_set(stages,'{0,agenda_date}','"2026-10-14"'),version=3 where id='92000000-0000-0000-0000-000000000001'$$,'23514',null,'Agenda submissions cannot be after the meeting');
+select throws_ok($$insert into public.curriculum_calendars(academic_year,meetings) values(2028,'[{"id":"a","academic_year":2028,"committee":"ARC","meeting_date":"2028-08-31","voting":true,"agenda_lead_days":0}]')$$,'23514',null,'Calendar meetings must belong to the selected academic year');
+select throws_ok($$insert into public.curriculum_changes(title,change_type,approval_process,start_date,implementation_year,stages) values('Invalid NOI','New Programs','Standard','2026-09-01',2027,'[{"id":"noi-publication","title":"Public","committee":null,"purpose":"Information","due_date":null,"agenda_date":null,"completed_on":"2026-09-20","outcome":"reported","notes":"","links":[]}]')$$,'23514',null,'New programs require development, ARC approval and publication stages');
+select ok(not private.valid_curriculum_stages('[{"id":"noi-development","title":"NOI","committee":null,"purpose":"Development","due_date":null,"agenda_date":null,"completed_on":null,"outcome":"pending","notes":"","links":[]},{"id":"arc-approval","title":"ARC","committee":"ARC","purpose":"Approval","due_date":null,"agenda_date":null,"completed_on":null,"outcome":"pending","notes":"","links":[]},{"id":"noi-publication","title":"Public","committee":null,"purpose":"Information","due_date":null,"agenda_date":null,"completed_on":"2026-09-20","outcome":"reported","notes":"","links":[]}]','2026-09-01','New Programs'),'NOI publication cannot precede actual ARC approval');
+select ok(private.valid_curriculum_stages('[{"id":"noi-development","title":"NOI","committee":null,"purpose":"Development","due_date":null,"agenda_date":null,"completed_on":null,"outcome":"pending","notes":"","links":[]},{"id":"arc-approval","title":"ARC","committee":"ARC","purpose":"Approval","due_date":null,"agenda_date":null,"completed_on":"2026-09-18","outcome":"approved","notes":"","links":[]},{"id":"noi-publication","title":"Public","committee":null,"purpose":"Information","due_date":null,"agenda_date":null,"completed_on":"2026-09-20","outcome":"reported","notes":"","links":[]}]','2026-09-01','New Programs'),'ARC approval enables actual publication');
+
+set local "request.jwt.claim.sub" = '00000000-0000-0000-0000-000000000003';
+select is((select count(*) from public.curriculum_changes where id='92000000-0000-0000-0000-000000000001'),0::bigint,'An out-of-scope chair cannot see the proposal');
+with changed as (update public.curriculum_changes set description='Forbidden',version=3 where id='92000000-0000-0000-0000-000000000001' returning id) select is((select count(*) from changed),0::bigint,'An out-of-scope chair cannot update the proposal');
+with removed as (delete from public.curriculum_changes where id='92000000-0000-0000-0000-000000000001' returning id) select is((select count(*) from removed),0::bigint,'An out-of-scope chair cannot delete the proposal');
+select throws_ok($$insert into public.curriculum_changes(title,change_type,approval_process,organization_unit_id,start_date,implementation_year,stages) select 'Forbidden','New Courses','Standard','10000000-0000-0000-0000-000000000002','2026-09-01',2027,'[{"id":"a","title":"Stage","committee":null,"purpose":"Development","due_date":null,"agenda_date":null,"completed_on":null,"outcome":"pending","notes":"","links":[]}]'::jsonb$$,'42501',null,'Out-of-scope inserts are denied');
+select lives_ok($$insert into public.curriculum_changes(id,title,change_type,approval_process,organization_unit_id,start_date,implementation_year,stages) values('92000000-0000-0000-0000-000000000002','Chair proposal','New Courses','Standard','10000000-0000-0000-0000-000000000003','2026-09-01',2027,'[{"id":"a","title":"Stage","committee":null,"purpose":"Development","due_date":null,"agenda_date":null,"completed_on":null,"outcome":"pending","notes":"","links":[]}]')$$,'Chair can create a proposal within their scope');
+select lives_ok($$update public.curriculum_changes set description='Chair edit',version=2 where id='92000000-0000-0000-0000-000000000002'$$,'Creator can update their proposal');
+select lives_ok($$insert into public.curriculum_calendars(academic_year,meetings) values(2028,'[]')$$,'Chair can manage the shared calendar');
+select lives_ok($$update public.curriculum_calendars set meetings='[]',version=2 where academic_year=2028$$,'Shared calendar edits advance the version');
+
+set local "request.jwt.claim.sub" = '00000000-0000-0000-0000-000000000002';
+select is((select count(*) from public.curriculum_changes where id='92000000-0000-0000-0000-000000000001'),0::bigint,'Unassigned instructor cannot read proposals');
+select throws_ok($$insert into public.curriculum_calendars(academic_year,meetings) values(2029,'[]')$$,'42501',null,'Instructor cannot change shared calendars');
+with changed as (update public.curriculum_calendars set meetings='[]',version=3 where academic_year=2028 returning academic_year) select is((select count(*) from changed),0::bigint,'Instructor cannot edit shared calendars');
+select throws_ok($$insert into public.curriculum_changes(title,change_type,approval_process,organization_unit_id,start_date,implementation_year,stages) values('Forbidden','New Courses','Standard','10000000-0000-0000-0000-000000000002','2026-09-01',2027,'[{"id":"a","title":"Stage","committee":null,"purpose":"Development","due_date":null,"agenda_date":null,"completed_on":null,"outcome":"pending","notes":"","links":[]}]')$$,'42501',null,'Instructor cannot create proposals');
+
+reset role;
+update public.profiles set is_active=false where id='00000000-0000-0000-0000-000000000003';
+set local role authenticated;
+set local "request.jwt.claim.sub" = '00000000-0000-0000-0000-000000000003';
+select is((select count(*) from public.curriculum_changes where id='92000000-0000-0000-0000-000000000002'),0::bigint,'Inactive owners lose proposal access');
+select is((select count(*) from public.curriculum_calendars),0::bigint,'Inactive staff cannot read calendars');
+reset role;
+set local role authenticated;
+set local "request.jwt.claim.sub" = '00000000-0000-0000-0000-000000000001';
+select lives_ok($$delete from public.curriculum_changes where id='92000000-0000-0000-0000-000000000001'$$,'Dean may delete an accessible proposal');
+select * from finish();
+rollback;

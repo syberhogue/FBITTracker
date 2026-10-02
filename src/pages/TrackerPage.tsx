@@ -5,6 +5,7 @@ import { Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContai
 import { Badge, EmptyState, Modal, PageTitle } from '../components/ui';
 import { useAuth } from '../features/auth';
 import { useData } from '../features/data';
+import { useLinkedGraduates } from '../features/graduates';
 import { downloadCsv, effectiveSubmission, failureRate, findCourseByCode, formatDate, gradeMetrics, gradeTemplateRows, importantDatesForTerm, normalizeStageLinkUrl, parseGradeFile, parseTargetCsv, stageVisualStatus, trackerSummary } from '../lib/domain';
 import type { AcademicTermDraft, Course, CourseEditDraft, GradeCsvResult, ImportantDate, Profile, Stage, StageStatus } from '../lib/types';
 
@@ -16,6 +17,7 @@ export function TrackerPage(){
   if(tracker.type==='general'&&tab!=='timeline')return <Navigate to={`/trackers/${tracker.id}/timeline`} replace/>;
   const summary=trackerSummary(tracker);const course=data.courses.find(c=>c.id===selectedCourse)??data.courses[0];const canManageTerms=['dean','academic_director'].includes(profile?.role??'');const canManageCourses=['dean','academic_director','chair','program_lead'].includes(profile?.role??'');const notify=(message:string)=>{setToast(message);window.setTimeout(()=>setToast(''),3200)};
   return <div className="mx-auto max-w-7xl p-5 md:p-8"><Link to="/dashboard" className="mb-3 inline-flex items-center gap-1 text-xs font-bold text-[#003C71] hover:text-[#EA7600]"><ArrowLeft size={15}/>Back to dashboard</Link><PageTitle title={tracker.title} body={tracker.description} actions={<div className="flex items-center gap-2"><Badge tone="blue">{tracker.category}</Badge><button className="btn-ghost text-red-600" onClick={async()=>{if(confirm(`Delete ${tracker.title}?`)){await data.deleteTracker(tracker.id);navigate('/dashboard')}}}><Trash2 size={16}/></button></div>}/>
+    <LinkedGraduateNavigation trackerId={tracker.id}/>
     <div className="card mb-6 flex items-center gap-6 p-4"><div><p className="text-[9px] font-black uppercase tracking-wider text-slate-500">Mandatory completion</p><p className="text-2xl font-black text-[#003C71]">{summary.progress}%</p></div><div className="h-3 flex-1 overflow-hidden rounded-full bg-slate-200"><div className="h-full rounded-full bg-[#EA7600] transition-all" style={{width:`${summary.progress}%`}}/></div><Badge tone={summary.status==='Completed'?'green':summary.status==='Attention Required'?'red':'yellow'}>{summary.status}</Badge></div>
     {tracker.type==='grade-submission'&&<div className="mb-6 flex overflow-x-auto border-b border-slate-200">{[['timeline','Timeline & stages',CalendarDays],['analytics','Grade analytics',BarChart3],['submissions','Submission checklist',FileCheck2]].map(([key,label,Icon]:any)=><NavLink key={key} to={`/trackers/${tracker.id}/${key}`} className={({isActive})=>`flex shrink-0 items-center gap-2 border-b-2 px-4 py-3 text-[11px] font-extrabold uppercase tracking-wider ${isActive?'border-[#EA7600] text-[#EA7600]':'border-transparent text-slate-500 hover:text-slate-900'}`}><Icon size={16}/>{label}</NavLink>)}</div>}
     {tab==='timeline'&&<Timeline tracker={tracker} editStage={setStageModal} uploadDocument={async(stageId,file)=>{await data.uploadDocument(tracker.id,stageId,file);notify('Document attached.')}} addStageLink={async(stageId,title,url)=>{await data.addStageLink(tracker.id,stageId,title,url);notify('Link attached.')}} deleteStageLink={async linkId=>{await data.deleteStageLink(linkId);notify('Link removed.')}}/>}
@@ -36,6 +38,13 @@ export function TrackerPage(){
     {overrideCourse&&<OverrideModal course={data.courses.find(c=>c.id===overrideCourse)!} current={data.overrides[`${overrideCourse}_${term}`]} onClose={()=>setOverrideCourse(undefined)} onSave={async(value,reason)=>{await data.setOverride(overrideCourse,term,value,reason);setOverrideCourse(undefined);notify(value?'Manual override saved.':'Returned to automatic status.')}}/>}
     {toast&&<div role="status" className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-lg bg-slate-950 px-4 py-3 text-xs font-bold text-white shadow-xl"><Check size={15} className="text-emerald-400"/>{toast}</div>}
   </div>;
+}
+
+function LinkedGraduateNavigation({ trackerId }: { trackerId: string }) {
+  const linked = useLinkedGraduates(trackerId);
+  if (linked.error) return <p role="alert" className="mb-4 text-xs text-red-700">Linked student navigation could not be loaded. <button className="underline" onClick={() => void linked.refetch()}>Retry</button></p>;
+  if (!linked.data?.length) return null;
+  return <nav aria-label="Linked MSc students" className="card mb-4 flex flex-wrap gap-3 p-3">{linked.data.map(student => <Link key={student.id} to={`/graduates?student=${student.id}`} className="inline-flex items-center gap-1 text-xs font-bold text-[#003C71] hover:underline"><ArrowLeft size={14}/>MSc progress: {student.student_name}</Link>)}</nav>;
 }
 
 function Timeline({tracker,editStage,uploadDocument,addStageLink,deleteStageLink}:{tracker:any;editStage(s:Stage):void;uploadDocument(id:string,file:File):Promise<void>;addStageLink(id:string,title:string,url:string):Promise<void>;deleteStageLink(id:string):Promise<void>}){

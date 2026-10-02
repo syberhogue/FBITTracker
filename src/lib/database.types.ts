@@ -158,6 +158,60 @@ export type Database = {
           },
         ]
       }
+      curriculum_calendars: {
+        Row: { academic_year: number; meetings: Json; version: number }
+        Insert: { academic_year: number; meetings: Json; version?: number }
+        Update: { academic_year?: number; meetings?: Json; version?: number }
+        Relationships: []
+      }
+      curriculum_changes: {
+        Row: {
+          approval_process: string
+          change_type: string
+          created_at: string
+          created_by: string
+          description: string
+          id: string
+          implementation_year: number
+          organization_unit_id: string | null
+          stages: Json
+          start_date: string
+          title: string
+          version: number
+        }
+        Insert: {
+          approval_process: string
+          change_type: string
+          created_at?: string
+          created_by?: string
+          description?: string
+          id?: string
+          implementation_year: number
+          organization_unit_id?: string | null
+          stages: Json
+          start_date: string
+          title: string
+          version?: number
+        }
+        Update: {
+          approval_process?: string
+          change_type?: string
+          created_at?: string
+          created_by?: string
+          description?: string
+          id?: string
+          implementation_year?: number
+          organization_unit_id?: string | null
+          stages?: Json
+          start_date?: string
+          title?: string
+          version?: number
+        }
+        Relationships: [
+          { foreignKeyName: "curriculum_changes_created_by_fkey"; columns: ["created_by"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] },
+          { foreignKeyName: "curriculum_changes_organization_unit_id_fkey"; columns: ["organization_unit_id"]; isOneToOne: false; referencedRelation: "organization_units"; referencedColumns: ["id"] },
+        ]
+      }
       documents: {
         Row: {
           bucket_id: string
@@ -392,6 +446,304 @@ export type Database = {
             columns: ["uploaded_by"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      graduate_categories: {
+        Row: {
+          color: string
+          is_deleted: boolean
+          key: string
+          name: string
+          sort_order: number
+          student_id: string
+        }
+        Insert: {
+          color: string
+          is_deleted?: boolean
+          key: string
+          name: string
+          sort_order?: number
+          student_id: string
+        }
+        Update: {
+          color?: string
+          is_deleted?: boolean
+          key?: string
+          name?: string
+          sort_order?: number
+          student_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "graduate_categories_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "graduate_students"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      graduate_deadlines: {
+        Row: {
+          amount: number | null
+          category_key: string
+          due_date: string
+          funding_kind: string | null
+          grant_name: string | null
+          id: string
+          is_deleted: boolean
+          item_type: string
+          starts_on: string | null
+          student_id: string
+          title: string
+        }
+        Insert: {
+          amount?: number | null
+          category_key: string
+          due_date: string
+          funding_kind?: string | null
+          grant_name?: string | null
+          id?: string
+          is_deleted?: boolean
+          item_type?: string
+          starts_on?: string | null
+          student_id: string
+          title: string
+        }
+        Update: {
+          amount?: number | null
+          category_key?: string
+          due_date?: string
+          funding_kind?: string | null
+          grant_name?: string | null
+          id?: string
+          is_deleted?: boolean
+          item_type?: string
+          starts_on?: string | null
+          student_id?: string
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "graduate_deadlines_student_id_category_key_fkey"
+            columns: ["student_id", "category_key"]
+            isOneToOne: false
+            referencedRelation: "graduate_categories"
+            referencedColumns: ["student_id", "key"]
+          },
+        ]
+      }
+      graduate_resources: {
+        Row: {
+          audience: string
+          created_at: string
+          created_by: string
+          description: string
+          id: string
+          title: string
+          url: string
+        }
+        Insert: {
+          audience?: string
+          created_at?: string
+          created_by?: string
+          description?: string
+          id?: string
+          title: string
+          url: string
+        }
+        Update: {
+          audience?: string
+          created_at?: string
+          created_by?: string
+          description?: string
+          id?: string
+          title?: string
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "graduate_resources_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      graduate_students: {
+        Row: {
+          co_supervisor_id: string | null
+          co_supervisor_name: string
+          committee_chair: string
+          committee_members: string[]
+          completed_on: string | null
+          created_at: string
+          created_by: string
+          defence_date: string | null
+          email: string
+          id: string
+          notes: string
+          organization_unit_id: string | null
+          revision_type: string
+          start_date: string
+          student_name: string
+          student_number: string
+          supervisor_id: string | null
+          supervisor_name: string
+          thesis_submission_date: string | null
+          university_examiner: string
+        }
+        Insert: {
+          co_supervisor_id?: string | null
+          co_supervisor_name?: string
+          committee_chair?: string
+          committee_members?: string[]
+          completed_on?: string | null
+          created_at?: string
+          created_by?: string
+          defence_date?: string | null
+          email?: string
+          id?: string
+          notes?: string
+          organization_unit_id?: string | null
+          revision_type?: string
+          start_date: string
+          student_name: string
+          student_number: string
+          supervisor_id?: string | null
+          supervisor_name: string
+          thesis_submission_date?: string | null
+          university_examiner?: string
+        }
+        Update: {
+          co_supervisor_id?: string | null
+          co_supervisor_name?: string
+          committee_chair?: string
+          committee_members?: string[]
+          completed_on?: string | null
+          created_at?: string
+          created_by?: string
+          defence_date?: string | null
+          email?: string
+          id?: string
+          notes?: string
+          organization_unit_id?: string | null
+          revision_type?: string
+          start_date?: string
+          student_name?: string
+          student_number?: string
+          supervisor_id?: string | null
+          supervisor_name?: string
+          thesis_submission_date?: string | null
+          university_examiner?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "graduate_students_co_supervisor_id_fkey"
+            columns: ["co_supervisor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "graduate_students_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "graduate_students_organization_unit_id_fkey"
+            columns: ["organization_unit_id"]
+            isOneToOne: false
+            referencedRelation: "organization_units"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "graduate_students_supervisor_id_fkey"
+            columns: ["supervisor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      graduate_task_records: {
+        Row: {
+          completed_on: string | null
+          course_semester_start: string | null
+          expected_on: string | null
+          is_deleted: boolean
+          is_draft: boolean
+          item_type: string | null
+          notes: string
+          planned_start_on: string | null
+          student_id: string
+          task_key: string
+        }
+        Insert: {
+          completed_on?: string | null
+          course_semester_start?: string | null
+          expected_on?: string | null
+          is_deleted?: boolean
+          is_draft?: boolean
+          item_type?: string | null
+          notes?: string
+          planned_start_on?: string | null
+          student_id: string
+          task_key: string
+        }
+        Update: {
+          completed_on?: string | null
+          course_semester_start?: string | null
+          expected_on?: string | null
+          is_deleted?: boolean
+          is_draft?: boolean
+          item_type?: string | null
+          notes?: string
+          planned_start_on?: string | null
+          student_id?: string
+          task_key?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "graduate_task_records_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "graduate_students"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      graduate_tracker_links: {
+        Row: {
+          student_id: string
+          tracker_id: string
+        }
+        Insert: {
+          student_id: string
+          tracker_id: string
+        }
+        Update: {
+          student_id?: string
+          tracker_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "graduate_tracker_links_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "graduate_students"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "graduate_tracker_links_tracker_id_fkey"
+            columns: ["tracker_id"]
+            isOneToOne: false
+            referencedRelation: "trackers"
             referencedColumns: ["id"]
           },
         ]

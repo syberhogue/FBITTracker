@@ -4,6 +4,8 @@ import { AppShell } from './components/AppShell';
 import { useAuth } from './features/auth';
 
 const DashboardPage = lazy(() => import('./pages/DashboardPage').then((module) => ({ default: module.DashboardPage })));
+const GraduatesPage = lazy(() => import('./pages/GraduatesPage').then((module) => ({ default: module.GraduatesPage })));
+const CurriculumPage = lazy(() => import('./pages/CurriculumPage').then((module) => ({ default: module.CurriculumPage })));
 const TrackerPage = lazy(() => import('./pages/TrackerPage').then((module) => ({ default: module.TrackerPage })));
 const UsersPage = lazy(() => import('./pages/AdminPages').then((module) => ({ default: module.UsersPage })));
 const SettingsPage = lazy(() => import('./pages/SettingsPage').then((module) => ({ default: module.SettingsPage })));
@@ -30,6 +32,8 @@ export default function App() {
     <Route path="/accept-invite" element={<AcceptInvitePage/>}/>
     <Route element={<Protected/>}>
       <Route path="dashboard" element={<DashboardPage/>}/>
+      <Route path="graduates" element={<GraduatesPage/>}/>
+      <Route path="curriculum" element={<CurriculumPage/>}/>
       <Route path="settings" element={<SettingsPage/>}/>
       <Route path="trackers/:trackerId/:tab" element={<TrackerPage/>}/>
       <Route path="admin/users" element={<UsersPage/>}/>

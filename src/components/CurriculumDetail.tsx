@@ -1,0 +1,61 @@
+import { useState } from 'react';
+import { ArrowUp, Plus, RotateCcw } from 'lucide-react';
+import { Badge } from './ui';
+import { GraduateTimeline, type TimelineItem } from './GraduateTimeline';
+import { CurriculumStageEditor } from './CurriculumEditors';
+import type { useCurriculum } from '../features/curriculum';
+import { adjustmentDefinition, calendarCutoff, classification, committeeInfo, curriculumError, curriculumWarnings, isChangeComplete, isMinorCurriculum, isStageComplete, majorDefinition, minorDefinition, noiExpiry, resourcesFor, scheduleStages, type CurriculumChange, type CurriculumStage } from '../lib/curriculum';
+import { displayDate, todayDate } from '../lib/graduate';
+import { jumpToGraduateSection } from '../lib/graduateNavigation';
+import { moveCurriculumStage } from '../lib/curriculumTimeline';
+import type { ResolveTimelineMove } from '../lib/useGraduateTimelineDrag';
+import type { GraduateTask } from '../lib/graduate';
+
+export function CurriculumDetail({ change, data, onEdit }: { change: CurriculumChange; data: ReturnType<typeof useCurriculum>; onEdit(): void }) {
+  const [editor, setEditor] = useState<CurriculumStage>(); const [error, setError] = useState(''); const [pending, setPending] = useState(false);
+  const meetings = data.meetingsForChange(change); const today = todayDate();
+  const completed = change.stages.filter(isStageComplete).length; const expiry = noiExpiry(change);
+  const warnings = curriculumWarnings(change, meetings, today);
+  const topId = `curriculum-${change.id}-top`;
+  const groupName = (stage: CurriculumStage) => stage.committee ? `${stage.committee} · ${committeeInfo[stage.committee].level}` : stage.id.startsWith('noi-') ? 'NOI development & publication' : 'Planning & consultation';
+  const groups = [...new Set(change.stages.map(groupName))].map(name => {
+    const stage = change.stages.find(item => groupName(item) === name)!;
+    const planningKey = stage.id.startsWith('noi-') ? 'noi' : 'planning';
+    return { name, shortName: stage.committee ?? (planningKey === 'noi' ? 'NOI' : 'Planning'), color: stage.committee ? committeeInfo[stage.committee].color : '#475569', target: `curriculum-${change.id}-${stage.committee ?? planningKey}` };
+  });
+  const items: TimelineItem[] = change.stages.flatMap((stage, index) => {
+    const waitingForPublication = change.change_type === 'New Programs' && index > change.stages.findIndex(item => item.id === 'noi-publication') && !change.stages.find(item => item.id === 'noi-publication')?.completed_on;
+    const group = groups.find(item => item.name === groupName(stage))!;
+    const common = { type: group.name, color: group.color, completed: isStageComplete(stage) };
+    return [{ ...common, task: { key: stage.id, title: stage.title, owner: 'Student / Supervisor' as const, dueDate: stage.due_date ?? stage.completed_on, timing: stage.purpose, editableDate: !stage.completed_on && !waitingForPublication, itemType: stage.purpose === 'Information' ? 'Report' as const : stage.committee ? 'Meeting' as const : 'Milestone' as const } }, ...(stage.agenda_date && stage.agenda_date !== stage.due_date ? [{ ...common, task: { key: `${stage.id}:agenda`, title: `${stage.title} agenda submission`, owner: 'Student / Supervisor' as const, dueDate: stage.agenda_date, timing: 'Agenda deadline', itemType: 'Form' as const } }] : [])];
+  });
+  const select = (key: string) => setEditor(change.stages.find(stage => key === stage.id || key === `${stage.id}:agenda`));
+  const saveStages = async (stages: CurriculumStage[]) => {
+    const { title, change_type, approval_process, organization_unit_id, start_date, implementation_year, description } = change;
+    await data.saveChange.mutateAsync({ id: change.id, version: change.version, draft: { title, change_type, approval_process, organization_unit_id, start_date, implementation_year, description, stages } });
+  };
+  const resolveMove: ResolveTimelineMove = (task, date) => {
+    const stages = moveCurriculumStage(change, task.key, date, meetings);
+    const dates: Record<string, string> = {};
+    stages.forEach(stage => {
+      if (stage.due_date) dates[stage.id] = stage.due_date;
+      if (stage.agenda_date) dates[`${stage.id}:agenda`] = stage.agenda_date;
+    });
+    return { date: dates[task.key], dates };
+  };
+  const moveStage = async (task: GraduateTask, date: string) => {
+    await saveStages(moveCurriculumStage(change, task.key, date, meetings));
+  };
+  const end = `${change.implementation_year}-08-31`;
+  const definitions = change.change_type === 'New Programs' ? ['Develop the Notice of Intent (NOI)', 'Obtain Academic Resource Committee (ARC) approval at a confirmed quarterly meeting', 'Record the date the approved NOI is made public', 'Complete standard governance within two calendar years of publication'] : isMinorCurriculum(change.change_type) ? minorDefinition : change.change_type === 'Minor Program Adjustments' ? adjustmentDefinition : majorDefinition;
+  const backToTop = <button className="btn-ghost gap-1" onClick={() => jumpToGraduateSection(topId)}><ArrowUp size={13}/>Back to top</button>;
+  return <div className="min-w-0 space-y-5">
+    <section id={topId} tabIndex={-1} className="card p-5" aria-label="Curriculum change summary"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-bold text-[#EA7600]">{classification(change.change_type)} · {change.approval_process}</p><h2 className="mt-1 text-xl font-black text-[#003C71]">{change.title}</h2><p className="mt-1 text-xs text-slate-500">{change.change_type}</p></div><button className="btn-ghost" onClick={onEdit}>Edit change</button></div><div className="mt-4 flex flex-wrap gap-2"><Badge tone={isChangeComplete(change) ? 'green' : 'blue'}>{completed}/{change.stages.length} stages complete</Badge><Badge>Implementation: {change.implementation_year}–{change.implementation_year + 1}</Badge></div><p className="mt-3 text-xs text-slate-600">Planning starts {displayDate(change.start_date)}. USC/GSC calendar submission cutoff: <b>{displayDate(calendarCutoff(change.implementation_year))}</b>.</p>{expiry && <p className="mt-2 text-sm font-bold text-blue-800">NOI governance deadline: {displayDate(expiry)}</p>}{change.description && <p className="mt-3 whitespace-pre-wrap text-sm text-slate-600">{change.description}</p>}</section>
+    {warnings.length > 0 && <details open className="rounded-xl border border-amber-200 bg-amber-50 p-4"><summary className="cursor-pointer text-sm font-bold text-amber-900">Planning attention ({warnings.length})</summary><ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-amber-900">{warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul></details>}
+    {error && <p role="alert" className="rounded bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+    <section className="card p-5"><div className="mb-3 flex flex-wrap items-center justify-between gap-2"><h3 className="font-extrabold text-[#003C71]">Overall Timeline</h3><div className="flex flex-wrap gap-2"><button className="btn-ghost gap-1" disabled={pending} onClick={async () => { setPending(true); setError(''); try { await saveStages(scheduleStages(change.stages, change.start_date, meetings, change.change_type === 'New Programs')); } catch (reason) { setError(curriculumError(reason)); } finally { setPending(false); } }}><RotateCcw size={14}/>{pending ? 'Rescheduling…' : 'Reschedule pending stages'}</button><button className="btn-orange gap-1" onClick={() => setEditor({ id: crypto.randomUUID(), title: 'Additional stage', committee: null, purpose: 'Development', due_date: null, agenda_date: null, outcome: 'pending', completed_on: null, notes: '', links: [] })}><Plus size={14}/>Add stage</button></div></div><GraduateTimeline variant="curriculum" label="Overall curriculum timeline" items={items} groups={groups} start={change.start_date} end={expiry ?? end} today={today} onSelect={task => select(task.key)} onMove={pending || data.saveChange.isPending ? undefined : moveStage} resolveMove={resolveMove}/></section>
+    {groups.map(group => <section key={group.name} id={group.target} tabIndex={-1} aria-label={group.name} className="card overflow-hidden border-t-4" style={{ borderTopColor: group.color }}><div className="flex flex-wrap items-center justify-between gap-2 px-5 pt-4"><h3 className="font-extrabold" style={{ color: group.color }}>{group.name}</h3>{backToTop}</div><div className="px-5 pt-3"><GraduateTimeline variant="curriculum" label={`${group.name} timeline`} items={items.filter(item => item.type === group.name)} start={change.start_date} end={expiry ?? end} today={today} onSelect={task => select(task.key)} onMove={pending || data.saveChange.isPending ? undefined : moveStage} resolveMove={resolveMove}/></div><details open><summary className="cursor-pointer border-y border-slate-100 bg-slate-50 px-5 py-3 text-xs font-bold text-slate-600">Stage checklist · {change.stages.filter(stage => groupName(stage) === group.name).length} stages</summary><div>{change.stages.filter(stage => groupName(stage) === group.name).map((stage, index) => <div key={stage.id} className={`space-y-2 p-5 ${index % 2 ? 'bg-slate-50' : ''}`}><div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-sm font-bold text-slate-800">{stage.title}</p><div className="mt-1 flex gap-2"><Badge tone={stage.purpose === 'Approval' ? 'blue' : 'gray'}>{stage.purpose === 'Approval' ? 'Voting / approval' : stage.purpose === 'Information' ? 'Information only' : 'Development'}</Badge><Badge tone={isStageComplete(stage) ? 'green' : stage.outcome === 'rejected' || stage.due_date && stage.due_date < today ? 'red' : 'gray'}>{isStageComplete(stage) ? stage.outcome : stage.outcome === 'rejected' ? 'Rejected' : stage.due_date && stage.due_date < today ? 'Overdue' : stage.outcome.replace('-', ' ')}</Badge></div></div><button className="btn-ghost" aria-label={`Update ${stage.title}`} onClick={() => setEditor(stage)}>Update</button></div><div className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-slate-600"><span>Meeting / deadline: <b>{stage.due_date ? displayDate(stage.due_date) : 'Unscheduled'}</b></span><span>Agenda: <b>{stage.agenda_date ? displayDate(stage.agenda_date) : 'Not set'}</b></span>{stage.completed_on && <span>Actual: <b>{displayDate(stage.completed_on)}</b></span>}</div>{stage.notes && <p className="whitespace-pre-wrap text-xs text-slate-600">{stage.notes}</p>}<div className="flex flex-wrap gap-x-4 gap-y-1">{stage.links.map((link, i) => <a key={i} href={link.url} target="_blank" rel="noreferrer" className="text-xs font-bold text-blue-700 underline">{link.title}</a>)}</div></div>)}</div></details></section>)}
+    <section className="card p-5" aria-label="Curriculum resources"><div className="mb-3 flex justify-between"><h3 className="font-extrabold text-[#003C71]">Resources & change guidance</h3>{backToTop}</div><ul className="list-disc space-y-1 pl-5 text-xs text-slate-600">{definitions.map(text => <li key={text}>{text}</li>)}</ul><p className="mt-3 text-xs text-slate-600">Consult other affected Faculty Councils when a modified course is core to their programs. Consult in accordance with current Indigenous consultation procedures for courses containing Indigenous content. Major modifications require an electronic proposal and evidence of consultation and are reported annually to the Quality Council.</p>{change.change_type === 'Minor Program Adjustments' && <p className="mt-3 text-xs text-slate-600">This tracker follows the requested AC approval stage. The linked policy describes Academic Council information reporting for minor program adjustments; confirm the applicable governance route.</p>}<div className="mt-3 space-y-2">{resourcesFor(change.change_type).map(link => <a key={link.url} href={link.url} target="_blank" rel="noreferrer" className="block text-xs font-bold text-blue-700 underline">{link.title}</a>)}</div></section>
+    {editor && <CurriculumStageEditor key={editor.id} stage={editor} change={change} meetings={meetings} onClose={() => setEditor(undefined)} onSave={async stage => { const stages = change.stages.some(item => item.id === stage.id) ? change.stages.map(item => item.id === stage.id ? stage : item) : [...change.stages, stage]; await saveStages(stages); setEditor(undefined); }}/ >}
+  </div>;
+}

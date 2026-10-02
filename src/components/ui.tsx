@@ -8,7 +8,10 @@ export function Badge({ children, tone='gray' }: { children: ReactNode; tone?: '
 
 export function Modal({ title, children, onClose, danger=false }: { title:string; children:ReactNode; onClose():void; danger?:boolean }) {
   const panel=useRef<HTMLDivElement>(null);
-  useEffect(()=>{const previous=document.activeElement as HTMLElement;panel.current?.focus();const onKey=(event:KeyboardEvent)=>event.key==='Escape'&&onClose();document.addEventListener('keydown',onKey);return()=>{document.removeEventListener('keydown',onKey);previous?.focus();};},[onClose]);
+  const closeRef=useRef(onClose);
+  useEffect(()=>{closeRef.current=onClose;},[onClose]);
+  // Focus belongs to the dialog's lifetime, not to each render of its form.
+  useEffect(()=>{const previous=document.activeElement as HTMLElement;panel.current?.focus();const onKey=(event:KeyboardEvent)=>event.key==='Escape'&&closeRef.current();document.addEventListener('keydown',onKey);return()=>{document.removeEventListener('keydown',onKey);previous?.focus();};},[]);
   return <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/65 p-4 backdrop-blur-sm" role="presentation" onMouseDown={(e)=>e.target===e.currentTarget&&onClose()}>
     <div ref={panel} tabIndex={-1} role="dialog" aria-modal="true" aria-label={title} className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white shadow-2xl">
       <div className={`sticky top-0 z-10 flex items-center justify-between px-6 py-4 text-white ${danger?'bg-red-700':'bg-[#003C71]'}`}><div className="flex items-center gap-2">{danger&&<AlertTriangle size={18}/>}<h2 className="font-extrabold">{title}</h2></div><button onClick={onClose} className="rounded p-1 hover:bg-white/10" aria-label="Close dialog"><X size={20}/></button></div>
